@@ -10,6 +10,7 @@ from utils.schema_extractor import build_schema_prompt
 from utils.chart_builder import build_chart_data
 from config import settings
 
+
 router = APIRouter(prefix="/api", tags=["chat"])
 
 
