@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from pathlib import Path
 import sqlite3
 
@@ -12,7 +12,7 @@ router = APIRouter(prefix="/api", tags=["upload"])
 
 
 @router.post("/upload", response_model=UploadResponse)
-async def upload_file(file: UploadFile = File(...), session_id: str = ""):
+async def upload_file(file: UploadFile = File(...), session_id: str = Form("")):
 
     # Create or get session
     if not session_id:

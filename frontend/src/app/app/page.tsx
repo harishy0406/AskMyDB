@@ -70,6 +70,7 @@ export default function AppPage() {
     setError(null);
     try {
       const result = await uploadFile(file, sessionId);
+      setSessionId(result.session_id);
       setSource({
         type: 'file',
         name: file.name,
