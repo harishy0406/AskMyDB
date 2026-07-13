@@ -13,7 +13,7 @@ export default function Footer() {
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center">
                 <Database size={16} className="text-white" />
               </div>
-              <span className="text-lg font-bold font-['Space_Grotesk']">TableTalk</span>
+              <span className="text-lg font-bold font-['Space_Grotesk']">AskMyDB</span>
             </div>
             <p className="text-sm text-gray-400">
               Chat with your data. No SQL required.
@@ -47,7 +47,7 @@ export default function Footer() {
           </div>
         </div>
         <div className="border-t border-white/5 mt-8 pt-6 text-center text-sm text-gray-500">
-          © {new Date().getFullYear()} TableTalk. Built by M Harish Gautham.
+          © {new Date().getFullYear()} AskMyDB. Built by M Harish Gautham.
         </div>
       </div>
     </footer>

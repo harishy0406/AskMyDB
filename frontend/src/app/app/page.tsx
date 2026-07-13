@@ -175,7 +175,7 @@ export default function AppPage() {
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center">
                 <Database size={16} className="text-white" />
               </div>
-              <span className="font-bold text-white font-['Space_Grotesk']">TableTalk</span>
+              <span className="font-bold text-white font-['Space_Grotesk']">AskMyDB</span>
             </div>
             <button
               onClick={() => setSidebarOpen(false)}
@@ -292,7 +292,7 @@ export default function AppPage() {
             <div className="flex items-center gap-2">
               <Bot size={18} className="text-blue-400" />
               <span className="text-sm font-medium text-white">
-                {source ? `Chatting with ${source.name}` : 'TableTalk'}
+                {source ? `Chatting with ${source.name}` : 'AskMyDB'}
               </span>
             </div>
           </div>

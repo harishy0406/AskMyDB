@@ -2,11 +2,11 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "TableTalk - Chat with your data. No SQL required.",
+  title: "AskMyDB - Chat with your data. No SQL required.",
   description:
     "Upload a file or connect a database and ask questions in plain English. AI generates SQL, shows results as tables and charts.",
   openGraph: {
-    title: "TableTalk - Chat with your data. No SQL required.",
+    title: "AskMyDB - Chat with your data. No SQL required.",
     description:
       "Upload a file or connect a database and ask questions in plain English. AI generates SQL, shows results as tables and charts.",
   },

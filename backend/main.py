@@ -4,7 +4,7 @@ from routers import upload, chat, session
 from config import settings
 
 app = FastAPI(
-    title="TableTalk API",
+    title="AskMyDB API",
     description="Chat with your data. No SQL required.",
     version="1.0.0",
 )
@@ -24,7 +24,7 @@ app.include_router(session.router)
 
 @app.get("/")
 async def root():
-    return {"message": "TableTalk API is running", "version": "1.0.0"}
+    return {"message": "AskMyDB API is running", "version": "1.0.0"}
 
 
 @app.get("/health")

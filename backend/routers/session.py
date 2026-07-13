@@ -31,5 +31,5 @@ async def get_schema(session_id: str):
 
 @router.post("/session/new")
 async def new_session():
-    session = session_manager.create_session()
-    return {"session_id": session["id"]}
+    session_id = session_manager.create_session()
+    return {"session_id": session_id}

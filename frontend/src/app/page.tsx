@@ -174,7 +174,7 @@ export default function Home() {
         <div className="max-w-6xl mx-auto">
           <AnimatedSection className="text-center mb-16">
             <h2 className="text-3xl md:text-5xl font-bold font-['Space_Grotesk'] mb-4">
-              Why <span className="text-gradient">TableTalk</span>
+              Why <span className="text-gradient">AskMyDB</span>
             </h2>
             <p className="text-gray-400 max-w-xl mx-auto">
               Built for speed, safety, and simplicity

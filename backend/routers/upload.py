@@ -16,13 +16,11 @@ router = APIRouter(prefix="/api", tags=["upload"])
 @router.post("/upload", response_model=UploadResponse)
 async def upload_file(file: UploadFile = File(...), session_id: str = ""):
     if not session_id:
-        session = session_manager.create_session()
-        session_id = session["id"]
+        session_id = session_manager.create_session()
     else:
         session = session_manager.get_session(session_id)
         if not session:
-            session = session_manager.create_session()
-            session_id = session["id"]
+            session_id = session_manager.create_session()
 
     ext = Path(file.filename).suffix.lower()
     if ext not in file_processor.ALLOWED_EXTENSIONS:
