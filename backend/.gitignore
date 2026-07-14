@@ -20,10 +20,7 @@ dist/
 site/
 *.egg-info/
 
-# Virtual environments
-.venv/
-venv/
-env/
+
 
 # Local app data
 # databases/
