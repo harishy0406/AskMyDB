@@ -33,3 +33,12 @@ async def get_schema(session_id: str):
 async def new_session():
     session_id = session_manager.create_session()
     return {"session_id": session_id}
+
+
+@router.delete("/session/{session_id}")
+async def delete_session(session_id: str):
+    session = session_manager.get_session(session_id)
+    if not session:
+        raise HTTPException(404, "Session not found")
+    session_manager.cleanup_session(session_id)
+    return {"status": "success", "message": "Session deleted successfully"}
