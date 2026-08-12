@@ -19,6 +19,12 @@ def validate_sql(query: str, allowed_tables: list[str] = None) -> tuple[bool, st
     for kw in BLOCKED_KEYWORDS:
         if kw in query_upper.split():
             return False, f"Blocked keyword detected: {kw}"
+            
+    if ";" in query:
+        return False, "Multiple statements (;) are not allowed"
+        
+    if "--" in query or "/*" in query:
+        return False, "SQL comments are not allowed"
 
     try:
         parsed = sqlglot.parse_one(query)
