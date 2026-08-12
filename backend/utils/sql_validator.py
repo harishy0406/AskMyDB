@@ -52,12 +52,20 @@ def validate_sql(query: str, allowed_tables: list[str] = None) -> tuple[bool, st
     return True, "Valid"
 
 
-def inject_limit(query: str, default_limit: int = 100) -> str:
+def inject_limit(query: str, default_limit: int = 100, max_limit: int = 1000) -> str:
     try:
         parsed = sqlglot.parse_one(query)
         if isinstance(parsed, exp.Select):
-            if not parsed.args.get("limit"):
+            existing_limit = parsed.args.get("limit")
+            if not existing_limit:
                 parsed = parsed.limit(default_limit)
+            else:
+                try:
+                    limit_val = int(existing_limit.expression.name)
+                    if limit_val > max_limit:
+                        parsed = parsed.limit(max_limit)
+                except Exception:
+                    pass
             return parsed.sql(dialect="sqlite")
     except Exception:
         pass
