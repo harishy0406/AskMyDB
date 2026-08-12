@@ -52,17 +52,34 @@ async def chat(request: ChatRequest):
         conn.close()
     except Exception as e:
         error_str = str(e)
-        retry_sql = f"SELECT 'Query error: {error_str}'"
+        retry_message = f"The previous query failed with error: {error_str}. Please correct it. The original query was: {final_sql}"
+        
         try:
+            raw_retry_sql = await llm_service.generate_sql(schema_prompt, retry_message, history)
+            cleaned_retry_sql = sanitize_sql(raw_retry_sql)
+            is_valid_retry, error_msg_retry = validate_sql(cleaned_retry_sql, session["tables"])
+            
+            if not is_valid_retry:
+                return ChatResponse(
+                    reply=f"I tried to fix the query but failed. Error: {error_msg_retry}",
+                    sql_query=cleaned_retry_sql,
+                    columns=[],
+                    rows=[],
+                    error=error_msg_retry,
+                )
+                
+            final_sql = inject_limit(cleaned_retry_sql, settings.default_limit)
+            
             conn = sqlite3.connect(session["db_path"])
+            conn.execute("PRAGMA query_only = ON;")
             cursor = conn.cursor()
             cursor.execute(final_sql)
             columns = [desc[0] for desc in cursor.description]
             rows = [list(row) for row in cursor.fetchall()]
             conn.close()
-        except Exception:
+        except Exception as retry_e:
             return ChatResponse(
-                reply=f"Sorry, I encountered an error executing the query: {error_str}",
+                reply=f"Sorry, I encountered an error executing the query and couldn't fix it: {error_str}",
                 sql_query=final_sql,
                 columns=[],
                 rows=[],
