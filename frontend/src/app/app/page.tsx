@@ -164,6 +164,18 @@ export default function AppPage() {
     setError(null);
   }
 
+  async function handleConnectDb() {
+    if (!dbConnStr.trim()) {
+      setError('Please enter a connection string.');
+      return;
+    }
+    if (!dbConnStr.startsWith('postgresql') && !dbConnStr.startsWith('mysql')) {
+      setError('Only postgresql:// or mysql:// connections are supported.');
+      return;
+    }
+    setError('Direct database connections are not fully implemented in this version.');
+  }
+
   function toggleSql(idx: number) {
     setShowSql((prev) => ({ ...prev, [idx]: !prev[idx] }));
   }
@@ -234,7 +246,7 @@ export default function AppPage() {
                 onChange={(e) => setDbConnStr(e.target.value)}
                 className="glass-input w-full rounded-lg px-3 py-2 text-xs mb-2"
               />
-              <button className="btn-primary text-xs py-1.5 px-3 w-full">
+              <button onClick={handleConnectDb} className="btn-primary text-xs py-1.5 px-3 w-full">
                 Connect
               </button>
             </div>
