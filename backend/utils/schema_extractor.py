@@ -33,8 +33,8 @@ def extract_schema(db_path: str, table_name: str = None) -> dict:
     return schema
 
 
-def build_schema_prompt(schema: dict) -> str:
-    parts = []
+def build_schema_prompt(schema: dict, dialect: str = "SQLite") -> str:
+    parts = [f"Please generate {dialect} compatible SQL for the following schema:"]
     for table_name, table_info in schema.items():
         cols_desc = ", ".join(
             [f"{c['name']} ({c['type']})" for c in table_info["columns"]]
