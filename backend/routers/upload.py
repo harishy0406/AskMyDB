@@ -3,7 +3,7 @@ from pathlib import Path
 import sqlite3
 
 from config import settings
-from models import UploadResponse
+from models import UploadResponse, DBConnectRequest, DBConnectResponse
 from services.session_manager import session_manager
 from services.file_processor import file_processor
 from utils.schema_extractor import extract_schema
@@ -96,3 +96,8 @@ async def upload_file(file: UploadFile = File(...), session_id: str = Form("")):
         row_count=row_count,
         preview=preview,
     )
+
+
+@router.post("/connect-db", response_model=DBConnectResponse)
+async def connect_db(request: DBConnectRequest):
+    raise HTTPException(501, "Direct database connections are not fully implemented in this version. Stay tuned!")
