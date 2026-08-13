@@ -11,7 +11,7 @@ import {
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
-import { uploadFile, sendChat, createSession, getSession } from '@/lib/api';
+import { uploadFile, sendChat, createSession, getSession, deleteSession } from '@/lib/api';
 
 type Message = {
   role: 'user' | 'assistant';
@@ -150,6 +150,13 @@ export default function AppPage() {
   }
 
   async function handleNewChat() {
+    if (sessionId) {
+      try {
+        await deleteSession(sessionId);
+      } catch (e) {
+        console.error('Failed to clean up old session', e);
+      }
+    }
     await initSession();
     setMessages([]);
     setSource(null);
