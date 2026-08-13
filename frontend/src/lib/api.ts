@@ -56,3 +56,11 @@ export async function getSchema(sessionId: string): Promise<any> {
   if (!res.ok) throw new Error("Schema not found");
   return res.json();
 }
+
+export async function deleteSession(sessionId: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/api/session/${sessionId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error("Failed to delete session");
+  return res.json();
+}
