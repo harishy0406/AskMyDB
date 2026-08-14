@@ -11,7 +11,7 @@ import {
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
-import { uploadFile, sendChat, createSession, getSession, deleteSession } from '@/lib/api';
+import { uploadFile, sendChat, createSession, getSession, deleteSession, connectDatabase } from '@/lib/api';
 
 type Message = {
   role: 'user' | 'assistant';
@@ -173,7 +173,27 @@ export default function AppPage() {
       setError('Only postgresql:// or mysql:// connections are supported.');
       return;
     }
-    setError('Direct database connections are not fully implemented in this version.');
+    
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await connectDatabase(sessionId, dbConnStr);
+      setSource({
+        type: 'database',
+        name: dbConnStr.split('@')[1] || dbConnStr,
+        tableName: result.tables?.[0] || 'Unknown',
+        columns: [],
+        rowCount: 0,
+      });
+      setMessages([{
+        role: 'assistant',
+        content: `✅ Connected to database. Ask me anything about this data!`,
+      }]);
+    } catch (err: any) {
+      setError(err.message || 'Connection failed.');
+    } finally {
+      setLoading(false);
+    }
   }
 
   function toggleSql(idx: number) {
