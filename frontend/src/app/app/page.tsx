@@ -479,9 +479,15 @@ export default function AppPage() {
 
           {error && (
             <div className="flex justify-center fade-in">
-              <div className="glass rounded-xl px-4 py-3 flex items-center gap-2 text-red-400 text-sm border border-red-500/20">
+              <div className="glass rounded-xl px-4 py-3 flex items-center gap-2 text-red-400 text-sm border border-red-500/20 relative pr-10">
                 <AlertCircle size={16} />
                 {error}
+                <button 
+                  onClick={() => setError(null)} 
+                  className="absolute right-3 text-red-400 hover:text-red-300 transition-colors"
+                >
+                  <X size={14} />
+                </button>
               </div>
             </div>
           )}
