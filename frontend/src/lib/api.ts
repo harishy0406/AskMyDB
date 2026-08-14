@@ -64,3 +64,16 @@ export async function deleteSession(sessionId: string): Promise<any> {
   if (!res.ok) throw new Error("Failed to delete session");
   return res.json();
 }
+
+export async function connectDatabase(sessionId: string, connectionString: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/api/connect-db`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ session_id: sessionId, connection_string: connectionString }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Connection failed" }));
+    throw new Error(err.detail || "Connection failed");
+  }
+  return res.json();
+}
