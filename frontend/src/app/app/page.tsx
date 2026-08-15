@@ -6,7 +6,7 @@ import {
   Send, Upload, Database, MessageSquare, Table2, BarChart3,
   Eye, EyeOff, ChevronDown, ChevronRight, FileText, Plus,
   Trash2, Loader2, AlertCircle, CheckCircle2, History,
-  X, Bot, User, Maximize2, Minimize2,
+  X, Bot, User, Maximize2, Minimize2, Download,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -198,6 +198,21 @@ export default function AppPage() {
 
   function toggleSql(idx: number) {
     setShowSql((prev) => ({ ...prev, [idx]: !prev[idx] }));
+  }
+
+  function downloadCsv(columns: string[], rows: any[][], index: number) {
+    const csvContent = [
+      columns.join(','),
+      ...rows.map(row => row.map(cell => JSON.stringify(cell ?? '')).join(','))
+    ].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `query_result_${index}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   }
 
   return (
@@ -397,6 +412,15 @@ export default function AppPage() {
                 {/* Table Results */}
                 {msg.columns && msg.columns.length > 0 && (
                   <div className="mt-3 glass rounded-xl overflow-hidden">
+                    <div className="bg-white/5 px-3 py-2 border-b border-white/10 flex justify-between items-center">
+                      <span className="text-xs text-gray-400 flex items-center gap-1.5"><Table2 size={12} /> Results</span>
+                      <button
+                        onClick={() => downloadCsv(msg.columns!, msg.rows || [], idx)}
+                        className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                      >
+                        <Download size={12} /> CSV
+                      </button>
+                    </div>
                     <div className="max-h-80 overflow-auto">
                       <table className="w-full text-xs">
                         <thead>
