@@ -32,3 +32,8 @@ uploads/*
 
 # Logs
 *.log
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3

@@ -7,11 +7,12 @@ import {
   Eye, EyeOff, ChevronDown, ChevronRight, FileText, Plus,
   Trash2, Loader2, AlertCircle, CheckCircle2, History,
   X, Bot, User, Maximize2, Minimize2, Download,
+  Layers, Search, Copy, Check, Sparkles,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
-import { uploadFile, sendChat, createSession, getSession, deleteSession, connectDatabase } from '@/lib/api';
+import { uploadFile, sendChat, createSession, getSession, deleteSession, connectDatabase, getSchema } from '@/lib/api';
 
 type Message = {
   role: 'user' | 'assistant';
@@ -43,6 +44,9 @@ export default function AppPage() {
   const [showDbInput, setShowDbInput] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<{ question: string; sql: string }[]>([]);
+  const [schemaData, setSchemaData] = useState<Record<string, { columns: { name: string; type: string }[] }> | null>(null);
+  const [expandedTables, setExpandedTables] = useState<Record<string, boolean>>({});
+  const [schemaSearch, setSchemaSearch] = useState('');
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -78,6 +82,15 @@ export default function AppPage() {
         columns: result.columns,
         rowCount: result.row_count,
       });
+      try {
+        const schema = await getSchema(result.session_id);
+        setSchemaData(schema);
+        if (schema && result.table_name) {
+          setExpandedTables({ [result.table_name]: true });
+        }
+      } catch (e) {
+        console.error('Failed to load schema', e);
+      }
       setMessages([{
         role: 'assistant',
         content: `✅ Loaded **${file.name}** (${result.row_count.toLocaleString()} rows, ${result.columns.length} columns). Ask me anything about this data!`,
@@ -161,6 +174,9 @@ export default function AppPage() {
     setMessages([]);
     setSource(null);
     setHistory([]);
+    setSchemaData(null);
+    setExpandedTables({});
+    setSchemaSearch('');
     setError(null);
   }
 
@@ -188,6 +204,17 @@ export default function AppPage() {
         columns: [],
         rowCount: 0,
       });
+
+      try {
+        const schema = await getSchema(result.session_id);
+        setSchemaData(schema);
+        if (schema && tableList.length > 0) {
+          setExpandedTables({ [tableList[0]]: true });
+        }
+      } catch (e) {
+        console.error('Failed to load schema', e);
+      }
+
       setMessages([{
         role: 'assistant',
         content: `✅ Connected to database (${tableList.length} table(s): ${tableList.join(', ')}). Ask me anything about this data!`,
@@ -199,6 +226,18 @@ export default function AppPage() {
       setLoading(false);
     }
   }
+
+  function toggleTable(tableName: string) {
+    setExpandedTables((prev) => ({ ...prev, [tableName]: !prev[tableName] }));
+  }
+
+  function insertIntoInput(token: string) {
+    setInput((prev) => {
+      const trimmed = prev.trim();
+      return trimmed ? `${trimmed} ${token}` : token;
+    });
+  }
+
 
   function toggleSql(idx: number) {
     setShowSql((prev) => ({ ...prev, [idx]: !prev[idx] }));
@@ -301,11 +340,99 @@ export default function AppPage() {
             </div>
             <div className="text-xs text-gray-500 space-y-0.5">
               <div>Table: <span className="text-gray-300">{source.tableName}</span></div>
-              <div>Rows: <span className="text-gray-300">{source.rowCount.toLocaleString()}</span></div>
-              <div>Columns: <span className="text-gray-300">{source.columns.join(', ')}</span></div>
+              {source.rowCount > 0 && (
+                <div>Rows: <span className="text-gray-300">{source.rowCount.toLocaleString()}</span></div>
+              )}
+              {source.columns.length > 0 && (
+                <div>Columns: <span className="text-gray-300">{source.columns.join(', ')}</span></div>
+              )}
             </div>
           </div>
         )}
+
+        {/* Schema Explorer */}
+        {schemaData && Object.keys(schemaData).length > 0 && (
+          <div className="border-b border-white/10 px-4 py-3 flex-shrink-0">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-300">
+                <Layers size={13} className="text-blue-400" />
+                <span>Schema Explorer</span>
+                <span className="text-[10px] bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded-full font-mono">
+                  {Object.keys(schemaData).length}
+                </span>
+              </div>
+            </div>
+
+            {Object.keys(schemaData).length > 2 && (
+              <div className="relative mb-2">
+                <Search size={11} className="absolute left-2.5 top-2 text-gray-500" />
+                <input
+                  type="text"
+                  placeholder="Filter tables..."
+                  value={schemaSearch}
+                  onChange={(e) => setSchemaSearch(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-lg pl-7 pr-2 py-1 text-[11px] text-gray-300 placeholder-gray-500 focus:outline-none focus:border-blue-500/50"
+                />
+              </div>
+            )}
+
+            <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+              {Object.entries(schemaData)
+                .filter(([tbl]) => !schemaSearch || tbl.toLowerCase().includes(schemaSearch.toLowerCase()))
+                .map(([tableName, tableInfo]) => {
+                  const isExpanded = !!expandedTables[tableName];
+                  return (
+                    <div key={tableName} className="rounded-lg bg-white/[0.03] border border-white/5 overflow-hidden">
+                      <div
+                        onClick={() => toggleTable(tableName)}
+                        className="px-2.5 py-1.5 flex items-center justify-between cursor-pointer hover:bg-white/5 transition-colors select-none"
+                      >
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          {isExpanded ? (
+                            <ChevronDown size={12} className="text-gray-400 flex-shrink-0" />
+                          ) : (
+                            <ChevronRight size={12} className="text-gray-400 flex-shrink-0" />
+                          )}
+                          <span
+                            className="text-xs font-medium text-gray-200 truncate hover:text-blue-400"
+                            title="Click table name to insert into chat"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              insertIntoInput(tableName);
+                            }}
+                          >
+                            {tableName}
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-gray-500 flex-shrink-0 ml-1">
+                          {tableInfo.columns.length} cols
+                        </span>
+                      </div>
+
+                      {isExpanded && (
+                        <div className="px-2.5 py-1.5 bg-black/20 border-t border-white/5 space-y-1">
+                          {tableInfo.columns.map((col, ci) => (
+                            <div
+                              key={ci}
+                              onClick={() => insertIntoInput(col.name)}
+                              className="flex items-center justify-between text-[11px] py-0.5 px-1.5 rounded hover:bg-white/5 cursor-pointer text-gray-400 hover:text-white transition-colors group"
+                              title={`Click to insert "${col.name}" into chat`}
+                            >
+                              <span className="truncate group-hover:text-blue-300 font-mono">{col.name}</span>
+                              <span className="text-[9px] uppercase px-1 py-0.5 rounded bg-white/5 text-gray-500 font-mono">
+                                {col.type.split('(')[0] || 'ANY'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        )}
+
 
         {/* History */}
         {history.length > 0 && (
