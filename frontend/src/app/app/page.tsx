@@ -7,7 +7,7 @@ import {
   Eye, EyeOff, ChevronDown, ChevronRight, FileText, Plus,
   Trash2, Loader2, AlertCircle, CheckCircle2, History,
   X, Bot, User, Maximize2, Minimize2, Download,
-  Layers, Search, Copy, Check, Sparkles,
+  Layers, Search, Copy, Check, Sparkles, ArrowUpRight,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -44,6 +44,7 @@ export default function AppPage() {
   const [showDbInput, setShowDbInput] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<{ question: string; sql: string }[]>([]);
+  const [copiedHistoryIdx, setCopiedHistoryIdx] = useState<number | null>(null);
   const [schemaData, setSchemaData] = useState<Record<string, { columns: { name: string; type: string }[] }> | null>(null);
   const [expandedTables, setExpandedTables] = useState<Record<string, boolean>>({});
   const [schemaSearch, setSchemaSearch] = useState('');
@@ -113,9 +114,9 @@ export default function AppPage() {
     maxFiles: 1,
   });
 
-  async function handleSend() {
-    if (!input.trim() || loading || !sessionId) return;
-    const question = input.trim();
+  async function executeQuestion(questionText: string) {
+    if (!questionText.trim() || loading || !sessionId) return;
+    const question = questionText.trim();
     setInput('');
     setError(null);
 
@@ -154,6 +155,18 @@ export default function AppPage() {
       setLoading(false);
     }
   }
+
+  async function handleSend() {
+    await executeQuestion(input);
+  }
+
+  function copyHistorySql(sql: string, idx: number, e: React.MouseEvent) {
+    e.stopPropagation();
+    navigator.clipboard.writeText(sql);
+    setCopiedHistoryIdx(idx);
+    setTimeout(() => setCopiedHistoryIdx(null), 2000);
+  }
+
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -437,14 +450,61 @@ export default function AppPage() {
         {/* History */}
         {history.length > 0 && (
           <div className="flex-1 overflow-y-auto p-4">
-            <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-3">
-              <History size={12} /> Query History
+            <div className="flex items-center justify-between text-xs text-gray-500 mb-3">
+              <div className="flex items-center gap-1.5">
+                <History size={12} />
+                <span>Query History</span>
+                <span className="text-[10px] bg-white/5 text-gray-400 px-1.5 py-0.5 rounded-full font-mono">
+                  {history.length}
+                </span>
+              </div>
+              <button
+                onClick={() => setHistory([])}
+                className="text-[10px] text-gray-500 hover:text-red-400 transition-colors flex items-center gap-1"
+                title="Clear query history"
+              >
+                <Trash2 size={10} /> Clear
+              </button>
             </div>
             <div className="space-y-2">
               {history.map((h, i) => (
-                <div key={i} className="glass rounded-lg p-2.5 cursor-pointer hover:bg-white/5 transition-colors">
-                  <p className="text-xs text-gray-300 truncate">{h.question}</p>
-                  <p className="text-[10px] text-gray-500 mt-0.5 truncate font-mono">{h.sql}</p>
+                <div
+                  key={i}
+                  onClick={() => setInput(h.question)}
+                  className="glass rounded-lg p-2.5 cursor-pointer hover:bg-white/5 transition-all group relative border border-white/5 hover:border-blue-500/30"
+                  title="Click to load into input"
+                >
+                  <div className="flex items-start justify-between gap-1">
+                    <p className="text-xs text-gray-300 font-medium line-clamp-2 group-hover:text-blue-300 transition-colors">
+                      {h.question}
+                    </p>
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                      <button
+                        onClick={(e) => copyHistorySql(h.sql, i, e)}
+                        className="p-1 rounded hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+                        title="Copy SQL query"
+                      >
+                        {copiedHistoryIdx === i ? (
+                          <Check size={11} className="text-green-400" />
+                        ) : (
+                          <Copy size={11} />
+                        )}
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          executeQuestion(h.question);
+                        }}
+                        className="p-1 rounded hover:bg-blue-600/30 text-blue-400 hover:text-blue-200 transition-colors"
+                        title="Re-run query"
+                      >
+                        <ArrowUpRight size={11} />
+                      </button>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-gray-500 mt-1 truncate font-mono bg-black/20 px-1.5 py-0.5 rounded">
+                    {h.sql}
+                  </p>
                 </div>
               ))}
             </div>
@@ -488,26 +548,75 @@ export default function AppPage() {
         <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6">
           {messages.length === 0 && (
             <div className="h-full flex items-center justify-center">
-              <div className="text-center max-w-md">
-                <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-blue-500/20 to-violet-600/20 border border-blue-500/20 flex items-center justify-center">
+              <div className="text-center max-w-lg">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-blue-500/20 to-violet-600/20 border border-blue-500/20 flex items-center justify-center shadow-lg shadow-blue-500/10">
                   <Database size={32} className="text-blue-400" />
                 </div>
-                <h2 className="text-xl font-bold text-white font-['Space_Grotesk'] mb-2">
+                <h2 className="text-2xl font-bold text-white font-['Space_Grotesk'] mb-2">
                   Ask your data anything
                 </h2>
-                <p className="text-sm text-gray-400 mb-4">
-                  Upload a file from the sidebar and start asking questions in plain English.
+                <p className="text-sm text-gray-400 mb-6">
+                  {source
+                    ? `Connected to ${source.name}. Click a suggested query below or type your question in natural language.`
+                    : "Upload a file or connect a database from the sidebar to start asking questions."}
                 </p>
-                <div className="glass-card p-4 text-left text-sm text-gray-400 space-y-2">
-                  <p className="text-xs text-gray-500 font-semibold mb-1">Try asking:</p>
-                  <p className="font-mono text-xs">"Show me all records"</p>
-                  <p className="font-mono text-xs">"What's the average value?"</p>
-                  <p className="font-mono text-xs">"Top 10 highest scores"</p>
-                  <p className="font-mono text-xs">"Group by category and count"</p>
+
+                <div className="text-left mb-3 flex items-center gap-1.5 text-xs text-gray-400 font-medium">
+                  <Sparkles size={13} className="text-blue-400" />
+                  <span>Suggested Questions</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-left">
+                  {[
+                    {
+                      label: "Show all records",
+                      query: source?.tableName && !source.tableName.includes(',')
+                        ? `Show me the first 20 records from ${source.tableName}`
+                        : "Show me the first 20 records",
+                      hint: "Preview sample rows and examine values",
+                    },
+                    {
+                      label: "Count & Summary",
+                      query: "What is the total number of records and summary metrics?",
+                      hint: "Calculate aggregate statistics",
+                    },
+                    {
+                      label: "Top values",
+                      query: "What are the top 10 highest values sorted in descending order?",
+                      hint: "Identify leaderboards and outliers",
+                    },
+                    {
+                      label: "Group and count",
+                      query: "Group the records by category and count the occurrences",
+                      hint: "Aggregate categories and render charts",
+                    },
+                  ].map((s, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => {
+                        if (source) {
+                          executeQuestion(s.query);
+                        } else {
+                          setInput(s.query);
+                        }
+                      }}
+                      className="glass rounded-xl p-3 text-left hover:bg-white/10 hover:border-blue-500/40 transition-all group border border-white/5 cursor-pointer relative"
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-semibold text-gray-200 group-hover:text-blue-400 transition-colors">
+                          {s.label}
+                        </span>
+                        <ArrowUpRight size={12} className="text-gray-500 group-hover:text-blue-400 transition-colors" />
+                      </div>
+                      <p className="text-[11px] text-gray-400 line-clamp-1 mb-1 font-mono">{s.query}</p>
+                      <span className="text-[10px] text-gray-500">{s.hint}</span>
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
           )}
+
 
           {messages.map((msg, idx) => (
             <div key={idx} className={`fade-in flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
