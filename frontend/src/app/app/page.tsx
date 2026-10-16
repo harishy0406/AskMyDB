@@ -8,7 +8,7 @@ import {
   Trash2, Loader2, AlertCircle, CheckCircle2, History,
   X, Bot, User, Maximize2, Minimize2, Download,
   Layers, Search, Copy, Check, Sparkles, ArrowUpRight,
-  Code, HelpCircle,
+  Code, HelpCircle, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -32,8 +32,215 @@ type SourceInfo = {
   rowCount: number;
 };
 
+function QueryResultTable({
+  columns,
+  rows,
+  messageIndex,
+  onDownloadCsv,
+}: {
+  columns: string[];
+  rows: any[][];
+  messageIndex: number;
+  onDownloadCsv: (columns: string[], rows: any[][], index: number) => void;
+}) {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortCol, setSortCol] = useState<number | null>(null);
+  const [sortAsc, setSortAsc] = useState<boolean>(true);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(10);
+
+  // Filter rows
+  const filteredRows = rows.filter((row) => {
+    if (!searchTerm.trim()) return true;
+    const term = searchTerm.toLowerCase();
+    return row.some((cell) => cell !== null && cell !== undefined && String(cell).toLowerCase().includes(term));
+  });
+
+  // Sort rows
+  const sortedRows = [...filteredRows].sort((a, b) => {
+    if (sortCol === null) return 0;
+    const valA = a[sortCol];
+    const valB = b[sortCol];
+    if (valA === valB) return 0;
+    if (valA === null || valA === undefined) return 1;
+    if (valB === null || valB === undefined) return -1;
+    
+    // Numeric sort
+    const numA = Number(valA);
+    const numB = Number(valB);
+    if (!isNaN(numA) && !isNaN(numB)) {
+      return sortAsc ? numA - numB : numB - numA;
+    }
+    // String sort
+    return sortAsc
+      ? String(valA).localeCompare(String(valB))
+      : String(valB).localeCompare(String(valA));
+  });
+
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(sortedRows.length / pageSize));
+  const page = Math.min(currentPage, totalPages);
+  const paginatedRows = sortedRows.slice((page - 1) * pageSize, page * pageSize);
+
+  function handleSort(colIdx: number) {
+    if (sortCol === colIdx) {
+      if (sortAsc) {
+        setSortAsc(false);
+      } else {
+        setSortCol(null);
+        setSortAsc(true);
+      }
+    } else {
+      setSortCol(colIdx);
+      setSortAsc(true);
+    }
+    setCurrentPage(1);
+  }
+
+  return (
+    <div className="mt-3 glass rounded-xl overflow-hidden border border-white/10">
+      {/* Table Header Controls */}
+      <div className="bg-white/5 px-3 py-2 border-b border-white/10 flex flex-wrap justify-between items-center gap-2">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-300 font-medium flex items-center gap-1.5">
+            <Table2 size={13} className="text-blue-400" /> Results
+          </span>
+          <span className="text-[10px] bg-white/10 text-gray-400 px-2 py-0.5 rounded-full font-mono">
+            {filteredRows.length === rows.length
+              ? `${rows.length} rows`
+              : `${filteredRows.length} / ${rows.length} filtered`}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          {rows.length > 5 && (
+            <div className="relative">
+              <Search size={11} className="absolute left-2.5 top-2 text-gray-500" />
+              <input
+                type="text"
+                placeholder="Search rows..."
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="bg-black/30 border border-white/10 rounded-lg pl-7 pr-2 py-1 text-xs text-gray-200 placeholder-gray-500 focus:outline-none focus:border-blue-500/50 w-36 sm:w-44"
+              />
+            </div>
+          )}
+
+          <button
+            onClick={() => onDownloadCsv(columns, filteredRows, messageIndex)}
+            className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors bg-white/5 hover:bg-white/10 px-2 py-1 rounded-lg"
+            title="Export filtered rows to CSV"
+          >
+            <Download size={12} /> CSV
+          </button>
+        </div>
+      </div>
+
+      {/* Table Body */}
+      <div className="max-h-80 overflow-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-white/10 bg-white/[0.02]">
+              {columns.map((col, ci) => (
+                <th
+                  key={ci}
+                  onClick={() => handleSort(ci)}
+                  className="px-3 py-2 text-left text-gray-300 font-semibold whitespace-nowrap cursor-pointer hover:bg-white/5 select-none transition-colors"
+                  title="Click to sort"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>{col}</span>
+                    {sortCol === ci ? (
+                      sortAsc ? (
+                        <ArrowUp size={11} className="text-blue-400" />
+                      ) : (
+                        <ArrowDown size={11} className="text-blue-400" />
+                      )
+                    ) : (
+                      <ArrowUpDown size={10} className="text-gray-600 hover:text-gray-400" />
+                    )}
+                  </div>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {paginatedRows.length === 0 ? (
+              <tr>
+                <td colSpan={columns.length} className="text-center py-6 text-gray-500 text-xs">
+                  No matching records found.
+                </td>
+              </tr>
+            ) : (
+              paginatedRows.map((row, ri) => (
+                <tr key={ri} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                  {row.map((cell: any, ci: number) => (
+                    <td key={ci} className="px-3 py-1.5 text-gray-300 whitespace-nowrap font-mono text-[11px]">
+                      {cell !== null && cell !== undefined ? String(cell) : <span className="text-gray-600">—</span>}
+                    </td>
+                  ))}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Pagination Footer */}
+      {sortedRows.length > 10 && (
+        <div className="bg-white/[0.02] px-3 py-2 border-t border-white/5 flex flex-wrap justify-between items-center text-xs text-gray-400 gap-2">
+          <div className="flex items-center gap-1">
+            <span>Rows per page:</span>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="bg-black/40 border border-white/10 rounded px-1.5 py-0.5 text-xs text-gray-300 focus:outline-none"
+            >
+              <option value={10}>10</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span>
+              Page {page} of {totalPages}
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                disabled={page <= 1}
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                className="p-1 rounded hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+                title="Previous page"
+              >
+                <ChevronLeft size={13} />
+              </button>
+              <button
+                disabled={page >= totalPages}
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                className="p-1 rounded hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+                title="Next page"
+              >
+                <ChevronRight size={13} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AppPage() {
   const [sessionId, setSessionId] = useState<string>('');
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -699,47 +906,14 @@ export default function AppPage() {
 
                 {/* Table Results */}
                 {msg.columns && msg.columns.length > 0 && (
-                  <div className="mt-3 glass rounded-xl overflow-hidden">
-                    <div className="bg-white/5 px-3 py-2 border-b border-white/10 flex justify-between items-center">
-                      <span className="text-xs text-gray-400 flex items-center gap-1.5"><Table2 size={12} /> Results</span>
-                      <button
-                        onClick={() => downloadCsv(msg.columns!, msg.rows || [], idx)}
-                        className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors"
-                      >
-                        <Download size={12} /> CSV
-                      </button>
-                    </div>
-                    <div className="max-h-80 overflow-auto">
-                      <table className="w-full text-xs">
-                        <thead>
-                          <tr className="border-b border-white/10">
-                            {msg.columns.map((col, ci) => (
-                              <th key={ci} className="px-3 py-2 text-left text-gray-300 font-semibold whitespace-nowrap">
-                                {col}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {msg.rows?.slice(0, 50).map((row, ri) => (
-                            <tr key={ri} className="border-b border-white/5 hover:bg-white/5">
-                              {row.map((cell: any, ci: number) => (
-                                <td key={ci} className="px-3 py-1.5 text-gray-400 whitespace-nowrap">
-                                  {cell !== null && cell !== undefined ? String(cell) : '—'}
-                                </td>
-                              ))}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    {msg.rows && msg.rows.length > 50 && (
-                      <div className="px-3 py-2 text-xs text-gray-500 border-t border-white/5">
-                        Showing 50 of {msg.rows.length} rows
-                      </div>
-                    )}
-                  </div>
+                  <QueryResultTable
+                    columns={msg.columns}
+                    rows={msg.rows || []}
+                    messageIndex={idx}
+                    onDownloadCsv={downloadCsv}
+                  />
                 )}
+
 
                 {/* Chart */}
                 {msg.chartData && msg.chartData.data && msg.chartData.data.length > 0 && (
