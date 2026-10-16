@@ -8,6 +8,7 @@ import {
   Trash2, Loader2, AlertCircle, CheckCircle2, History,
   X, Bot, User, Maximize2, Minimize2, Download,
   Layers, Search, Copy, Check, Sparkles, ArrowUpRight,
+  Code, HelpCircle,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -45,6 +46,7 @@ export default function AppPage() {
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<{ question: string; sql: string }[]>([]);
   const [copiedHistoryIdx, setCopiedHistoryIdx] = useState<number | null>(null);
+  const [copiedSqlIdx, setCopiedSqlIdx] = useState<number | null>(null);
   const [schemaData, setSchemaData] = useState<Record<string, { columns: { name: string; type: string }[] }> | null>(null);
   const [expandedTables, setExpandedTables] = useState<Record<string, boolean>>({});
   const [schemaSearch, setSchemaSearch] = useState('');
@@ -166,6 +168,13 @@ export default function AppPage() {
     setCopiedHistoryIdx(idx);
     setTimeout(() => setCopiedHistoryIdx(null), 2000);
   }
+
+  function copyMessageSql(sql: string, idx: number) {
+    navigator.clipboard.writeText(sql);
+    setCopiedSqlIdx(idx);
+    setTimeout(() => setCopiedSqlIdx(null), 2000);
+  }
+
 
 
   function handleKeyDown(e: React.KeyboardEvent) {
@@ -631,19 +640,58 @@ export default function AppPage() {
                   <div className="text-sm whitespace-pre-wrap">{msg.content}</div>
                 </div>
 
-                {/* SQL Toggle */}
+                {/* SQL Toggle & Action Bar */}
                 {msg.sql && (
                   <div className="mt-2">
-                    <button
-                      onClick={() => toggleSql(idx)}
-                      className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-blue-400 transition-colors"
-                    >
-                      {showSql[idx] ? <EyeOff size={12} /> : <Eye size={12} />}
-                      {showSql[idx] ? 'Hide SQL' : 'View Generated SQL'}
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => toggleSql(idx)}
+                        className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-blue-400 transition-colors"
+                      >
+                        {showSql[idx] ? <EyeOff size={12} /> : <Eye size={12} />}
+                        {showSql[idx] ? 'Hide SQL' : 'View Generated SQL'}
+                      </button>
+                    </div>
+
                     {showSql[idx] && (
-                      <div className="mt-1 glass rounded-xl p-3 overflow-x-auto">
-                        <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap">{msg.sql}</pre>
+                      <div className="mt-2 glass rounded-xl overflow-hidden border border-white/10">
+                        <div className="bg-white/5 px-3 py-1.5 border-b border-white/10 flex items-center justify-between text-xs">
+                          <span className="text-[11px] text-gray-400 font-mono flex items-center gap-1">
+                            <Code size={11} className="text-blue-400" /> SQL Query
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => {
+                                executeQuestion(`Explain this SQL query step-by-step in simple terms:\n\n${msg.sql}`);
+                              }}
+                              className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-blue-300 transition-colors px-2 py-0.5 rounded hover:bg-white/5"
+                              title="Ask the assistant to explain this query"
+                            >
+                              <HelpCircle size={11} className="text-blue-400" />
+                              <span>Explain Query</span>
+                            </button>
+                            <button
+                              onClick={() => copyMessageSql(msg.sql!, idx)}
+                              className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-white transition-colors px-2 py-0.5 rounded hover:bg-white/5"
+                              title="Copy SQL to clipboard"
+                            >
+                              {copiedSqlIdx === idx ? (
+                                <>
+                                  <Check size={11} className="text-green-400" />
+                                  <span className="text-green-400">Copied!</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Copy size={11} />
+                                  <span>Copy</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                        <div className="p-3 bg-black/40 overflow-x-auto">
+                          <pre className="text-xs text-emerald-400 font-mono whitespace-pre-wrap">{msg.sql}</pre>
+                        </div>
                       </div>
                     )}
                   </div>
