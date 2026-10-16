@@ -10,19 +10,23 @@ class LLMService:
         self.base_url = "https://openrouter.ai/api/v1/chat/completions"
 
     async def generate_sql(
-        self, schema_prompt: str, user_question: str, conversation_history: list[dict] = None
+        self,
+        schema_prompt: str,
+        user_question: str,
+        conversation_history: list[dict] = None,
+        dialect: str = "SQLite",
     ) -> str:
         if not self.api_key:
             return "SELECT 'OpenRouter API key not configured. Please set OPENROUTER_API_KEY in .env';"
 
-        system_prompt = """You are a SQL generation assistant. Given a database schema and a user question, generate ONE valid, read-only SQL SELECT query that answers it.
+        system_prompt = f"""You are a SQL generation assistant. Given a database schema and a user question, generate ONE valid, read-only SQL SELECT query that answers it.
 
 Rules:
 - Only generate SELECT statements. Never DROP, DELETE, UPDATE, INSERT, ALTER, TRUNCATE, CREATE, or any other DDL/DML.
 - Use only the exact table and column names provided in the schema.
 - If the question is ambiguous, make a reasonable assumption.
 - Always include a LIMIT clause (default 100) unless the user explicitly requests more rows.
-- Use standard SQL that works with SQLite.
+- Use standard SQL that works with {dialect}.
 - Return ONLY the raw SQL query text, no explanation, no markdown formatting, no code fences."""
 
         messages = [{"role": "system", "content": system_prompt}]

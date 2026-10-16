@@ -20,6 +20,7 @@ class SessionManager:
             "db_path": str(db_path),
             "source_type": None,
             "source_name": None,
+            "dialect": "sqlite",
             "tables": [],
             "schema": {},
             "query_history": [],

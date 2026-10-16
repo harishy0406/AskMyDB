@@ -52,9 +52,17 @@ def validate_sql(query: str, allowed_tables: list[str] = None) -> tuple[bool, st
     return True, "Valid"
 
 
-def inject_limit(query: str, default_limit: int = 100, max_limit: int = 1000) -> str:
+def inject_limit(query: str, default_limit: int = 100, max_limit: int = 1000, dialect: str = "sqlite") -> str:
     try:
-        parsed = sqlglot.parse_one(query)
+        sqlglot_dialect = dialect.lower()
+        if "postgres" in sqlglot_dialect:
+            sqlglot_dialect = "postgres"
+        elif "mysql" in sqlglot_dialect:
+            sqlglot_dialect = "mysql"
+        else:
+            sqlglot_dialect = "sqlite"
+
+        parsed = sqlglot.parse_one(query, read=sqlglot_dialect)
         if isinstance(parsed, exp.Select):
             existing_limit = parsed.args.get("limit")
             if not existing_limit:
@@ -66,10 +74,11 @@ def inject_limit(query: str, default_limit: int = 100, max_limit: int = 1000) ->
                         parsed = parsed.limit(max_limit)
                 except Exception:
                     pass
-            return parsed.sql(dialect="sqlite")
+            return parsed.sql(dialect=sqlglot_dialect)
     except Exception:
         pass
     return query
+
 
 
 def sanitize_sql(query: str) -> str:

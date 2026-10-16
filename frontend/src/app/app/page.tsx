@@ -169,8 +169,9 @@ export default function AppPage() {
       setError('Please enter a connection string.');
       return;
     }
-    if (!dbConnStr.startsWith('postgresql') && !dbConnStr.startsWith('mysql')) {
-      setError('Only postgresql:// or mysql:// connections are supported.');
+    const lower = dbConnStr.toLowerCase();
+    if (!lower.startsWith('postgresql') && !lower.startsWith('mysql') && !lower.startsWith('sqlite')) {
+      setError('Only postgresql://, mysql://, or sqlite:/// connections are supported.');
       return;
     }
     
@@ -178,17 +179,20 @@ export default function AppPage() {
     setError(null);
     try {
       const result = await connectDatabase(sessionId, dbConnStr);
+      setSessionId(result.session_id);
+      const tableList = result.tables || [];
       setSource({
         type: 'database',
-        name: dbConnStr.split('@')[1] || dbConnStr,
-        tableName: result.tables?.[0] || 'Unknown',
+        name: dbConnStr.includes('@') ? dbConnStr.split('@')[1] : dbConnStr.split('/').pop() || 'Database',
+        tableName: tableList.length > 0 ? tableList.join(', ') : 'No tables found',
         columns: [],
         rowCount: 0,
       });
       setMessages([{
         role: 'assistant',
-        content: `✅ Connected to database. Ask me anything about this data!`,
+        content: `✅ Connected to database (${tableList.length} table(s): ${tableList.join(', ')}). Ask me anything about this data!`,
       }]);
+      setShowDbInput(false);
     } catch (err: any) {
       setError(err.message || 'Connection failed.');
     } finally {
@@ -276,7 +280,7 @@ export default function AppPage() {
             <div className="mt-2">
               <input
                 type="text"
-                placeholder="postgresql://user:pass@host:5432/db"
+                placeholder="postgresql://..., mysql://..., or sqlite:///..."
                 value={dbConnStr}
                 onChange={(e) => setDbConnStr(e.target.value)}
                 className="glass-input w-full rounded-lg px-3 py-2 text-xs mb-2"

@@ -1,6 +1,7 @@
 import sqlite3
 import pandas as pd
 from pathlib import Path
+from sqlalchemy import inspect, text
 
 
 def extract_schema(db_path: str, table_name: str = None) -> dict:
@@ -30,6 +31,36 @@ def extract_schema(db_path: str, table_name: str = None) -> dict:
         }
 
     conn.close()
+    return schema
+
+
+def extract_db_schema(engine) -> dict:
+    inspector = inspect(engine)
+    table_names = inspector.get_table_names()
+    schema = {}
+    with engine.connect() as conn:
+        for table in table_names:
+            cols = []
+            for col in inspector.get_columns(table):
+                cols.append({
+                    "name": col["name"],
+                    "type": str(col["type"]),
+                    "nullable": bool(col.get("nullable", True)),
+                })
+
+            sample_rows = []
+            try:
+                res = conn.execute(text(f"SELECT * FROM {table} LIMIT 3"))
+                col_names = list(res.keys())
+                for r in res.fetchall():
+                    sample_rows.append(dict(zip(col_names, [str(v) if v is not None else None for v in r])))
+            except Exception:
+                sample_rows = []
+
+            schema[table] = {
+                "columns": cols,
+                "sample_rows": sample_rows,
+            }
     return schema
 
 
