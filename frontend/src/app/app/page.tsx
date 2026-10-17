@@ -218,13 +218,24 @@ function QueryResultTable({
   columns: string[];
   rows: any[][];
   messageIndex: number;
-  onDownloadCsv: (columns: string[], rows: any[][], index: number) => void;
+  onDownloadCsv?: (columns: string[], rows: any[][], index: number) => void;
 }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortCol, setSortCol] = useState<number | null>(null);
   const [sortAsc, setSortAsc] = useState<boolean>(true);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(10);
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  const [copiedMd, setCopiedMd] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsFullscreen(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isFullscreen]);
 
   // Filter rows
   const filteredRows = rows.filter((row) => {
@@ -274,144 +285,267 @@ function QueryResultTable({
     setCurrentPage(1);
   }
 
-  return (
-    <div className="mt-3 glass rounded-xl overflow-hidden border border-white/10">
-      {/* Table Header Controls */}
-      <div className="bg-white/5 px-3 py-2 border-b border-white/10 flex flex-wrap justify-between items-center gap-2">
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-300 font-medium flex items-center gap-1.5">
-            <Table2 size={13} className="text-blue-400" /> Results
-          </span>
-          <span className="text-[10px] bg-white/10 text-gray-400 px-2 py-0.5 rounded-full font-mono">
-            {filteredRows.length === rows.length
-              ? `${rows.length} rows`
-              : `${filteredRows.length} / ${rows.length} filtered`}
-          </span>
+  function handleExportCsv() {
+    if (onDownloadCsv) {
+      onDownloadCsv(columns, filteredRows, messageIndex);
+      return;
+    }
+    const csvContent = [
+      columns.join(','),
+      ...filteredRows.map((row) => row.map((cell) => JSON.stringify(cell ?? '')).join(',')),
+    ].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `query_result_${messageIndex + 1}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
+  function handleExportJson() {
+    const records = filteredRows.map((row) => {
+      const obj: Record<string, any> = {};
+      columns.forEach((col, idx) => {
+        obj[col] = row[idx];
+      });
+      return obj;
+    });
+    const blob = new Blob([JSON.stringify(records, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `query_result_${messageIndex + 1}.json`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
+  function handleExportMarkdown() {
+    const header = `| ${columns.join(' | ')} |`;
+    const divider = `| ${columns.map(() => '---').join(' | ')} |`;
+    const body = filteredRows
+      .map(
+        (row) =>
+          `| ${row.map((c) => (c !== null && c !== undefined ? String(c).replace(/\|/g, '\\|') : '')).join(' | ')} |`
+      )
+      .join('\n');
+    const mdContent = `${header}\n${divider}\n${body}\n`;
+    const blob = new Blob([mdContent], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `query_result_${messageIndex + 1}.md`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
+  function handleCopyMarkdown() {
+    const header = `| ${columns.join(' | ')} |`;
+    const divider = `| ${columns.map(() => '---').join(' | ')} |`;
+    const body = filteredRows
+      .map(
+        (row) =>
+          `| ${row.map((c) => (c !== null && c !== undefined ? String(c).replace(/\|/g, '\\|') : '')).join(' | ')} |`
+      )
+      .join('\n');
+    navigator.clipboard.writeText(`${header}\n${divider}\n${body}\n`);
+    setCopiedMd(true);
+    setTimeout(() => setCopiedMd(false), 2000);
+  }
+
+  const tableHeaderControls = (isModal: boolean) => (
+    <div className="bg-white/5 px-3 py-2 border-b border-white/10 flex flex-wrap justify-between items-center gap-2">
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-gray-300 font-medium flex items-center gap-1.5">
+          <Table2 size={13} className="text-blue-400" /> {isModal ? 'Expanded Table View' : 'Results'}
+        </span>
+        <span className="text-[10px] bg-white/10 text-gray-400 px-2 py-0.5 rounded-full font-mono">
+          {filteredRows.length === rows.length
+            ? `${rows.length} rows`
+            : `${filteredRows.length} / ${rows.length} filtered`}
+        </span>
+      </div>
+
+      <div className="flex items-center gap-2 flex-wrap">
+        {rows.length > 5 && (
+          <div className="relative">
+            <Search size={11} className="absolute left-2.5 top-2 text-gray-500" />
+            <input
+              type="text"
+              placeholder="Search rows..."
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="bg-black/30 border border-white/10 rounded-lg pl-7 pr-2 py-1 text-xs text-gray-200 placeholder-gray-500 focus:outline-none focus:border-blue-500/50 w-32 sm:w-44"
+            />
+          </div>
+        )}
+
+        {/* Multi-Format Export Options */}
+        <div className="flex items-center bg-black/30 rounded-lg p-0.5 border border-white/10 gap-0.5">
+          <button
+            onClick={handleExportCsv}
+            className="flex items-center gap-1 text-[11px] text-blue-400 hover:text-blue-300 transition-colors hover:bg-white/10 px-2 py-0.5 rounded"
+            title="Download CSV"
+          >
+            <Download size={11} /> CSV
+          </button>
+          <button
+            onClick={handleExportJson}
+            className="flex items-center gap-1 text-[11px] text-purple-400 hover:text-purple-300 transition-colors hover:bg-white/10 px-2 py-0.5 rounded"
+            title="Download JSON"
+          >
+            JSON
+          </button>
+          <button
+            onClick={handleExportMarkdown}
+            className="flex items-center gap-1 text-[11px] text-emerald-400 hover:text-emerald-300 transition-colors hover:bg-white/10 px-2 py-0.5 rounded"
+            title="Download Markdown Table"
+          >
+            MD
+          </button>
+          <button
+            onClick={handleCopyMarkdown}
+            className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-white transition-colors hover:bg-white/10 px-1.5 py-0.5 rounded"
+            title="Copy Markdown Table to Clipboard"
+          >
+            {copiedMd ? <Check size={11} className="text-green-400" /> : <Copy size={11} />}
+          </button>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          {rows.length > 5 && (
-            <div className="relative">
-              <Search size={11} className="absolute left-2.5 top-2 text-gray-500" />
-              <input
-                type="text"
-                placeholder="Search rows..."
-                value={searchTerm}
-                onChange={(e) => {
-                  setSearchTerm(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="bg-black/30 border border-white/10 rounded-lg pl-7 pr-2 py-1 text-xs text-gray-200 placeholder-gray-500 focus:outline-none focus:border-blue-500/50 w-36 sm:w-44"
-              />
-            </div>
-          )}
+        {/* Fullscreen Toggle */}
+        <button
+          onClick={() => setIsFullscreen(!isFullscreen)}
+          className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors border border-white/5"
+          title={isModal ? 'Close Fullscreen (Esc)' : 'Expand to Fullscreen'}
+        >
+          {isModal ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+        </button>
+      </div>
+    </div>
+  );
 
+  const tableBody = (
+    <table className="w-full text-xs">
+      <thead>
+        <tr className="border-b border-white/10 bg-white/[0.02] sticky top-0 backdrop-blur-sm z-10">
+          {columns.map((col, ci) => (
+            <th
+              key={ci}
+              onClick={() => handleSort(ci)}
+              className="px-3 py-2 text-left text-gray-300 font-semibold whitespace-nowrap cursor-pointer hover:bg-white/5 select-none transition-colors"
+              title="Click to sort"
+            >
+              <div className="flex items-center gap-1">
+                <span>{col}</span>
+                {sortCol === ci ? (
+                  sortAsc ? (
+                    <ArrowUp size={11} className="text-blue-400" />
+                  ) : (
+                    <ArrowDown size={11} className="text-blue-400" />
+                  )
+                ) : (
+                  <ArrowUpDown size={10} className="text-gray-600 hover:text-gray-400" />
+                )}
+              </div>
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {paginatedRows.length === 0 ? (
+          <tr>
+            <td colSpan={columns.length} className="text-center py-6 text-gray-500 text-xs">
+              No matching records found.
+            </td>
+          </tr>
+        ) : (
+          paginatedRows.map((row, ri) => (
+            <tr key={ri} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+              {row.map((cell: any, ci: number) => (
+                <td key={ci} className="px-3 py-1.5 text-gray-300 whitespace-nowrap font-mono text-[11px]">
+                  {cell !== null && cell !== undefined ? String(cell) : <span className="text-gray-600">—</span>}
+                </td>
+              ))}
+            </tr>
+          ))
+        )}
+      </tbody>
+    </table>
+  );
+
+  const tableFooter = (
+    <div className="bg-white/[0.02] px-3 py-2 border-t border-white/5 flex flex-wrap justify-between items-center text-xs text-gray-400 gap-2">
+      <div className="flex items-center gap-1">
+        <span>Rows per page:</span>
+        <select
+          value={pageSize}
+          onChange={(e) => {
+            setPageSize(Number(e.target.value));
+            setCurrentPage(1);
+          }}
+          className="bg-black/40 border border-white/10 rounded px-1.5 py-0.5 text-xs text-gray-300 focus:outline-none"
+        >
+          <option value={10}>10</option>
+          <option value={25}>25</option>
+          <option value={50}>50</option>
+          <option value={100}>100</option>
+        </select>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <span>
+          Page {page} of {totalPages}
+        </span>
+        <div className="flex items-center gap-1">
           <button
-            onClick={() => onDownloadCsv(columns, filteredRows, messageIndex)}
-            className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors bg-white/5 hover:bg-white/10 px-2 py-1 rounded-lg"
-            title="Export filtered rows to CSV"
+            disabled={page <= 1}
+            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            className="p-1 rounded hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+            title="Previous page"
           >
-            <Download size={12} /> CSV
+            <ChevronLeft size={13} />
+          </button>
+          <button
+            disabled={page >= totalPages}
+            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+            className="p-1 rounded hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+            title="Next page"
+          >
+            <ChevronRight size={13} />
           </button>
         </div>
       </div>
+    </div>
+  );
 
-      {/* Table Body */}
-      <div className="max-h-80 overflow-auto">
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="border-b border-white/10 bg-white/[0.02]">
-              {columns.map((col, ci) => (
-                <th
-                  key={ci}
-                  onClick={() => handleSort(ci)}
-                  className="px-3 py-2 text-left text-gray-300 font-semibold whitespace-nowrap cursor-pointer hover:bg-white/5 select-none transition-colors"
-                  title="Click to sort"
-                >
-                  <div className="flex items-center gap-1">
-                    <span>{col}</span>
-                    {sortCol === ci ? (
-                      sortAsc ? (
-                        <ArrowUp size={11} className="text-blue-400" />
-                      ) : (
-                        <ArrowDown size={11} className="text-blue-400" />
-                      )
-                    ) : (
-                      <ArrowUpDown size={10} className="text-gray-600 hover:text-gray-400" />
-                    )}
-                  </div>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {paginatedRows.length === 0 ? (
-              <tr>
-                <td colSpan={columns.length} className="text-center py-6 text-gray-500 text-xs">
-                  No matching records found.
-                </td>
-              </tr>
-            ) : (
-              paginatedRows.map((row, ri) => (
-                <tr key={ri} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                  {row.map((cell: any, ci: number) => (
-                    <td key={ci} className="px-3 py-1.5 text-gray-300 whitespace-nowrap font-mono text-[11px]">
-                      {cell !== null && cell !== undefined ? String(cell) : <span className="text-gray-600">—</span>}
-                    </td>
-                  ))}
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+  return (
+    <>
+      <div className="mt-3 glass rounded-xl overflow-hidden border border-white/10">
+        {tableHeaderControls(false)}
+        <div className="max-h-80 overflow-auto">{tableBody}</div>
+        {(sortedRows.length > 10 || pageSize !== 10) && tableFooter}
       </div>
 
-      {/* Pagination Footer */}
-      {sortedRows.length > 10 && (
-        <div className="bg-white/[0.02] px-3 py-2 border-t border-white/5 flex flex-wrap justify-between items-center text-xs text-gray-400 gap-2">
-          <div className="flex items-center gap-1">
-            <span>Rows per page:</span>
-            <select
-              value={pageSize}
-              onChange={(e) => {
-                setPageSize(Number(e.target.value));
-                setCurrentPage(1);
-              }}
-              className="bg-black/40 border border-white/10 rounded px-1.5 py-0.5 text-xs text-gray-300 focus:outline-none"
-            >
-              <option value={10}>10</option>
-              <option value={25}>25</option>
-              <option value={50}>50</option>
-              <option value={100}>100</option>
-            </select>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span>
-              Page {page} of {totalPages}
-            </span>
-            <div className="flex items-center gap-1">
-              <button
-                disabled={page <= 1}
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                className="p-1 rounded hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
-                title="Previous page"
-              >
-                <ChevronLeft size={13} />
-              </button>
-              <button
-                disabled={page >= totalPages}
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                className="p-1 rounded hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
-                title="Next page"
-              >
-                <ChevronRight size={13} />
-              </button>
-            </div>
+      {/* Fullscreen Modal View */}
+      {isFullscreen && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-200">
+          <div className="bg-[#0b1120] border border-white/20 rounded-2xl flex flex-col w-full max-w-6xl h-[90vh] shadow-2xl overflow-hidden">
+            {tableHeaderControls(true)}
+            <div className="flex-1 overflow-auto p-1">{tableBody}</div>
+            {tableFooter}
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
 
