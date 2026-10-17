@@ -9,9 +9,11 @@ import {
   X, Bot, User, Maximize2, Minimize2, Download,
   Layers, Search, Copy, Check, Sparkles, ArrowUpRight,
   Code, HelpCircle, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft,
+  TrendingUp, Activity, PieChart as PieChartIcon,
 } from 'lucide-react';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  BarChart, Bar, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 import { uploadFile, sendChat, createSession, getSession, deleteSession, connectDatabase, getSchema } from '@/lib/api';
 
@@ -31,6 +33,181 @@ type SourceInfo = {
   columns: string[];
   rowCount: number;
 };
+
+const CHART_PALETTE = ['#3b82f6', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b', '#06b6d4', '#6366f1'];
+
+function InteractiveChart({ chartData }: { chartData: any }) {
+  const initialType = chartData.suggested_type || chartData.type || 'bar';
+  const [chartType, setChartType] = useState<'bar' | 'line' | 'area' | 'pie'>(initialType);
+
+  const canPie = Boolean(chartData.can_pie || (chartData.lines?.length === 1 && chartData.data?.length <= 10));
+
+  const availableTypes: { id: 'bar' | 'line' | 'area' | 'pie'; label: string; icon: any }[] = [
+    { id: 'bar', label: 'Bar', icon: BarChart3 },
+    { id: 'line', label: 'Line', icon: TrendingUp },
+    { id: 'area', label: 'Area', icon: Activity },
+  ];
+  if (canPie) {
+    availableTypes.push({ id: 'pie', label: 'Pie', icon: PieChartIcon });
+  }
+
+  const currentType = availableTypes.some((t) => t.id === chartType) ? chartType : 'bar';
+
+  return (
+    <div className="mt-3 glass rounded-xl p-4 border border-white/10">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <div className="flex items-center gap-2 text-xs text-gray-300 font-medium">
+          <BarChart3 size={14} className="text-blue-400" />
+          <span>Data Visualization</span>
+          <span className="text-[10px] bg-white/10 text-gray-400 px-2 py-0.5 rounded-full font-mono">
+            {chartData.data?.length || 0} points
+          </span>
+        </div>
+
+        {/* Chart Type Selector */}
+        <div className="flex items-center bg-black/40 p-0.5 rounded-lg border border-white/10 gap-0.5">
+          {availableTypes.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = currentType === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setChartType(tab.id)}
+                className={`flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md font-medium transition-all ${
+                  isActive
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
+                }`}
+                title={`Switch to ${tab.label} chart`}
+              >
+                <Icon size={12} />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="h-64 w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          {currentType === 'bar' ? (
+            <BarChart data={chartData.data}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+              <XAxis dataKey={chartData.x_key} stroke="#6b7280" fontSize={11} />
+              <YAxis stroke="#6b7280" fontSize={11} />
+              <Tooltip
+                contentStyle={{
+                  background: 'rgba(15,15,30,0.95)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: '8px',
+                  color: '#e2e8f0',
+                  fontSize: '12px',
+                }}
+              />
+              <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
+              {chartData.lines?.map((line: string, li: number) => (
+                <Bar
+                  key={li}
+                  dataKey={line}
+                  fill={CHART_PALETTE[li % CHART_PALETTE.length]}
+                  radius={[4, 4, 0, 0]}
+                />
+              ))}
+            </BarChart>
+          ) : currentType === 'line' ? (
+            <LineChart data={chartData.data}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+              <XAxis dataKey={chartData.x_key} stroke="#6b7280" fontSize={11} />
+              <YAxis stroke="#6b7280" fontSize={11} />
+              <Tooltip
+                contentStyle={{
+                  background: 'rgba(15,15,30,0.95)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: '8px',
+                  color: '#e2e8f0',
+                  fontSize: '12px',
+                }}
+              />
+              <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
+              {chartData.lines?.map((line: string, li: number) => (
+                <Line
+                  key={li}
+                  type="monotone"
+                  dataKey={line}
+                  stroke={CHART_PALETTE[li % CHART_PALETTE.length]}
+                  strokeWidth={2.5}
+                  dot={{ r: 3, fill: CHART_PALETTE[li % CHART_PALETTE.length] }}
+                  activeDot={{ r: 6 }}
+                />
+              ))}
+            </LineChart>
+          ) : currentType === 'area' ? (
+            <AreaChart data={chartData.data}>
+              <defs>
+                {chartData.lines?.map((line: string, li: number) => (
+                  <linearGradient key={li} id={`areaGrad-${li}`} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={CHART_PALETTE[li % CHART_PALETTE.length]} stopOpacity={0.6} />
+                    <stop offset="95%" stopColor={CHART_PALETTE[li % CHART_PALETTE.length]} stopOpacity={0.05} />
+                  </linearGradient>
+                ))}
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+              <XAxis dataKey={chartData.x_key} stroke="#6b7280" fontSize={11} />
+              <YAxis stroke="#6b7280" fontSize={11} />
+              <Tooltip
+                contentStyle={{
+                  background: 'rgba(15,15,30,0.95)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: '8px',
+                  color: '#e2e8f0',
+                  fontSize: '12px',
+                }}
+              />
+              <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
+              {chartData.lines?.map((line: string, li: number) => (
+                <Area
+                  key={li}
+                  type="monotone"
+                  dataKey={line}
+                  stroke={CHART_PALETTE[li % CHART_PALETTE.length]}
+                  fillOpacity={1}
+                  fill={`url(#areaGrad-${li})`}
+                />
+              ))}
+            </AreaChart>
+          ) : (
+            <PieChart>
+              <Tooltip
+                contentStyle={{
+                  background: 'rgba(15,15,30,0.95)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: '8px',
+                  color: '#e2e8f0',
+                  fontSize: '12px',
+                }}
+              />
+              <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
+              <Pie
+                data={chartData.data}
+                dataKey={chartData.lines?.[0] || 'value'}
+                nameKey={chartData.x_key || 'name'}
+                cx="50%"
+                cy="50%"
+                innerRadius={50}
+                outerRadius={80}
+                paddingAngle={3}
+              >
+                {chartData.data?.map((_: any, index: number) => (
+                  <Cell key={`cell-${index}`} fill={CHART_PALETTE[index % CHART_PALETTE.length]} />
+                ))}
+              </Pie>
+            </PieChart>
+          )}
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
 
 function QueryResultTable({
   columns,
@@ -917,38 +1094,7 @@ export default function AppPage() {
 
                 {/* Chart */}
                 {msg.chartData && msg.chartData.data && msg.chartData.data.length > 0 && (
-                  <div className="mt-3 glass rounded-xl p-4">
-                    <div className="flex items-center gap-2 text-xs text-gray-400 mb-3">
-                      <BarChart3 size={14} className="text-blue-400" />
-                      Chart View
-                    </div>
-                    <div className="h-64">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={msg.chartData.data}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                          <XAxis dataKey={msg.chartData.x_key} stroke="#6b7280" fontSize={11} />
-                          <YAxis stroke="#6b7280" fontSize={11} />
-                          <Tooltip
-                            contentStyle={{
-                              background: 'rgba(15,15,30,0.95)',
-                              border: '1px solid rgba(255,255,255,0.1)',
-                              borderRadius: '8px',
-                              color: '#e2e8f0',
-                              fontSize: '12px',
-                            }}
-                          />
-                          {msg.chartData.lines?.map((line: string, li: number) => (
-                            <Bar
-                              key={li}
-                              dataKey={line}
-                              fill={li === 0 ? '#4f8cff' : '#7c3aed'}
-                              radius={[4, 4, 0, 0]}
-                            />
-                          ))}
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
+                  <InteractiveChart chartData={msg.chartData} />
                 )}
               </div>
             </div>
