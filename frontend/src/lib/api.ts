@@ -77,3 +77,17 @@ export async function connectDatabase(sessionId: string, connectionString: strin
   }
   return res.json();
 }
+
+export async function executeSql(sessionId: string, sqlQuery: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/api/execute-sql`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ session_id: sessionId, sql_query: sqlQuery }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Query execution failed" }));
+    throw new Error(err.detail || "Query execution failed");
+  }
+  return res.json();
+}
+

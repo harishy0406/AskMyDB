@@ -10,12 +10,13 @@ import {
   Layers, Search, Copy, Check, Sparkles, ArrowUpRight,
   Code, HelpCircle, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft,
   TrendingUp, Activity, PieChart as PieChartIcon,
+  Play, Terminal, RotateCcw,
 } from 'lucide-react';
 import {
   BarChart, Bar, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
-import { uploadFile, sendChat, createSession, getSession, deleteSession, connectDatabase, getSchema } from '@/lib/api';
+import { uploadFile, sendChat, createSession, getSession, deleteSession, connectDatabase, getSchema, executeSql } from '@/lib/api';
 
 type Message = {
   role: 'user' | 'assistant';
@@ -568,6 +569,10 @@ export default function AppPage() {
   const [schemaData, setSchemaData] = useState<Record<string, { columns: { name: string; type: string }[] }> | null>(null);
   const [expandedTables, setExpandedTables] = useState<Record<string, boolean>>({});
   const [schemaSearch, setSchemaSearch] = useState('');
+  const [editingSqlIdx, setEditingSqlIdx] = useState<number | null>(null);
+  const [sqlDraft, setSqlDraft] = useState<string>('');
+  const [isExecutingSql, setIsExecutingSql] = useState<boolean>(false);
+  const [sqlExecError, setSqlExecError] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -691,6 +696,39 @@ export default function AppPage() {
     navigator.clipboard.writeText(sql);
     setCopiedSqlIdx(idx);
     setTimeout(() => setCopiedSqlIdx(null), 2000);
+  }
+
+  async function handleRunEditedSql(idx: number) {
+    if (!sessionId || !sqlDraft.trim()) return;
+    setIsExecutingSql(true);
+    setSqlExecError(null);
+    try {
+      const res = await executeSql(sessionId, sqlDraft.trim());
+      if (res.error) {
+        setSqlExecError(res.error);
+        return;
+      }
+      setMessages((prev) => {
+        const next = [...prev];
+        next[idx] = {
+          ...next[idx],
+          content: res.reply || `Direct query executed successfully (${res.rows?.length || 0} rows).`,
+          sql: res.sql_query,
+          columns: res.columns,
+          rows: res.rows,
+          chartData: res.chart_data,
+        };
+        return next;
+      });
+      setEditingSqlIdx(null);
+      if (res.sql_query) {
+        setHistory((prev) => [...prev, { question: `Direct SQL: ${res.sql_query.slice(0, 40)}...`, sql: res.sql_query }]);
+      }
+    } catch (err: any) {
+      setSqlExecError(err.message || 'Execution failed');
+    } finally {
+      setIsExecutingSql(false);
+    }
   }
 
 
@@ -1177,7 +1215,29 @@ export default function AppPage() {
                           <span className="text-[11px] text-gray-400 font-mono flex items-center gap-1">
                             <Code size={11} className="text-blue-400" /> SQL Query
                           </span>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={() => {
+                                if (editingSqlIdx === idx) {
+                                  setEditingSqlIdx(null);
+                                  setSqlExecError(null);
+                                } else {
+                                  setEditingSqlIdx(idx);
+                                  setSqlDraft(msg.sql!);
+                                  setSqlExecError(null);
+                                  setShowSql((prev) => ({ ...prev, [idx]: true }));
+                                }
+                              }}
+                              className={`flex items-center gap-1 text-[11px] px-2 py-0.5 rounded transition-colors ${
+                                editingSqlIdx === idx
+                                  ? 'bg-blue-600/30 text-blue-300 border border-blue-500/30'
+                                  : 'text-gray-400 hover:text-blue-300 hover:bg-white/5'
+                              }`}
+                              title="Edit and run this SQL query"
+                            >
+                              <Play size={10} className="text-blue-400 fill-current" />
+                              <span>{editingSqlIdx === idx ? 'Close Editor' : 'Edit & Run'}</span>
+                            </button>
                             <button
                               onClick={() => {
                                 executeQuestion(`Explain this SQL query step-by-step in simple terms:\n\n${msg.sql}`);
@@ -1186,7 +1246,7 @@ export default function AppPage() {
                               title="Ask the assistant to explain this query"
                             >
                               <HelpCircle size={11} className="text-blue-400" />
-                              <span>Explain Query</span>
+                              <span>Explain</span>
                             </button>
                             <button
                               onClick={() => copyMessageSql(msg.sql!, idx)}
@@ -1207,9 +1267,71 @@ export default function AppPage() {
                             </button>
                           </div>
                         </div>
-                        <div className="p-3 bg-black/40 overflow-x-auto">
-                          <pre className="text-xs text-emerald-400 font-mono whitespace-pre-wrap">{msg.sql}</pre>
-                        </div>
+
+                        {editingSqlIdx === idx ? (
+                          <div className="p-3 bg-black/60 border-t border-white/5 flex flex-col gap-2.5">
+                            <div className="flex items-center justify-between text-[11px] text-gray-400">
+                              <span className="flex items-center gap-1.5 text-blue-400 font-medium">
+                                <Terminal size={12} /> SQL Editor Playground
+                              </span>
+                              <span className="text-[10px] text-gray-500 font-mono">Executes live against active schema</span>
+                            </div>
+                            <textarea
+                              value={sqlDraft}
+                              onChange={(e) => setSqlDraft(e.target.value)}
+                              rows={4}
+                              className="w-full bg-black/80 border border-blue-500/40 rounded-lg p-2.5 text-xs text-emerald-400 font-mono focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400/50 resize-y leading-relaxed"
+                              placeholder="Enter SQL query..."
+                            />
+                            {sqlExecError && (
+                              <div className="text-[11px] text-rose-300 bg-rose-500/10 border border-rose-500/20 px-2.5 py-1.5 rounded-lg flex items-center gap-1.5">
+                                <AlertCircle size={13} className="text-rose-400 flex-shrink-0" />
+                                <span>{sqlExecError}</span>
+                              </div>
+                            )}
+                            <div className="flex items-center justify-between pt-1">
+                              <button
+                                onClick={() => setSqlDraft(msg.sql!)}
+                                className="flex items-center gap-1 text-[11px] text-gray-500 hover:text-gray-300 transition-colors"
+                                title="Reset to original generated SQL"
+                              >
+                                <RotateCcw size={10} /> Reset
+                              </button>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => {
+                                    setEditingSqlIdx(null);
+                                    setSqlExecError(null);
+                                  }}
+                                  className="text-[11px] text-gray-400 hover:text-gray-200 px-2.5 py-1 rounded hover:bg-white/5 transition-colors"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  disabled={isExecutingSql || !sqlDraft.trim()}
+                                  onClick={() => handleRunEditedSql(idx)}
+                                  className="flex items-center gap-1.5 text-xs bg-blue-600 hover:bg-blue-500 text-white font-medium px-3.5 py-1 rounded-lg transition-colors disabled:opacity-50 shadow-sm"
+                                >
+                                  {isExecutingSql ? (
+                                    <>
+                                      <Loader2 size={12} className="animate-spin" />
+                                      <span>Running...</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Play size={11} className="fill-current" />
+                                      <span>Run Query</span>
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="p-3 bg-black/40 overflow-x-auto">
+                            <pre className="text-xs text-emerald-400 font-mono whitespace-pre-wrap">{msg.sql}</pre>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

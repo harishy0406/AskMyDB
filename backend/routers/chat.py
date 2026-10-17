@@ -4,7 +4,7 @@ import json
 from typing import Any
 from sqlalchemy import create_engine, text
 
-from models import ChatRequest, ChatResponse
+from models import ChatRequest, ChatResponse, ExecuteSQLRequest
 from services.session_manager import session_manager
 from services.llm_service import llm_service
 from utils.sql_validator import validate_sql, sanitize_sql, inject_limit
@@ -139,4 +139,57 @@ async def chat(request: ChatRequest):
         rows=rows,
         chart_data=chart_data,
     )
+
+
+@router.post("/execute-sql", response_model=ChatResponse)
+async def execute_sql(request: ExecuteSQLRequest):
+    session = session_manager.get_session(request.session_id)
+    if not session:
+        raise HTTPException(404, "Session not found. Please upload a file or connect a database first.")
+
+    tables = session.get("tables", [])
+    if not tables:
+        raise HTTPException(400, "No tables found in current session.")
+
+    dialect = session.get("dialect", "sqlite")
+    cleaned_sql = sanitize_sql(request.sql_query)
+    is_valid, error_msg = validate_sql(cleaned_sql, tables)
+
+    if not is_valid:
+        return ChatResponse(
+            reply=f"SQL validation error: {error_msg}",
+            sql_query=cleaned_sql,
+            columns=[],
+            rows=[],
+            error=error_msg,
+        )
+
+    final_sql = inject_limit(cleaned_sql, settings.default_limit, dialect=dialect)
+
+    try:
+        columns, rows = execute_session_query(session, final_sql)
+    except Exception as e:
+        return ChatResponse(
+            reply=f"Database execution error: {str(e)}",
+            sql_query=final_sql,
+            columns=[],
+            rows=[],
+            error=str(e),
+        )
+
+    chart_data = build_chart_data(columns, rows)
+
+    session_manager.add_query_history(session["id"], {
+        "question": f"Direct Query: {final_sql[:60]}...",
+        "sql": final_sql,
+    })
+
+    return ChatResponse(
+        reply=f"Query executed successfully ({len(rows)} row(s)).",
+        sql_query=final_sql,
+        columns=columns,
+        rows=rows,
+        chart_data=chart_data,
+    )
+
 

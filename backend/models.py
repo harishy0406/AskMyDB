@@ -27,6 +27,11 @@ class ChatRequest(BaseModel):
     conversation_history: Optional[list[dict]] = None
 
 
+class ExecuteSQLRequest(BaseModel):
+    session_id: str
+    sql_query: str
+
+
 class ChatResponse(BaseModel):
     reply: str
     sql_query: str
