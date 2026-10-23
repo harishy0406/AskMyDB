@@ -11,6 +11,7 @@ import {
   Code, HelpCircle, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft,
   TrendingUp, Activity, PieChart as PieChartIcon,
   Play, Terminal, RotateCcw, ArrowRight, Camera, Palette,
+  Bookmark, Zap,
 } from 'lucide-react';
 import {
   BarChart, Bar, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell,
@@ -25,6 +26,16 @@ type Message = {
   columns?: string[];
   rows?: any[][];
   chartData?: any;
+  executionTimeMs?: number;
+  dialect?: string;
+};
+
+type StarredQuery = {
+  id: string;
+  question: string;
+  sql: string;
+  timestamp: number;
+  dialect?: string;
 };
 
 type SourceInfo = {
@@ -687,8 +698,21 @@ export default function AppPage() {
   const [tableProfileData, setTableProfileData] = useState<any | null>(null);
   const [isProfileLoading, setIsProfileLoading] = useState<boolean>(false);
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [starredQueries, setStarredQueries] = useState<StarredQuery[]>([]);
+  const [historyTab, setHistoryTab] = useState<'recent' | 'starred'>('recent');
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('askmydb_starred_queries');
+      if (saved) {
+        setStarredQueries(JSON.parse(saved));
+      }
+    } catch (e) {
+      console.error('Failed to load starred queries', e);
+    }
+  }, []);
 
   useEffect(() => {
     initSession();
@@ -778,6 +802,8 @@ export default function AppPage() {
         columns: result.columns,
         rows: result.rows,
         chartData: result.chart_data,
+        executionTimeMs: result.execution_time_ms,
+        dialect: result.dialect,
       };
       setMessages((prev) => [...prev, assistantMsg]);
       setShowSql((prev) => ({ ...prev, [idx]: true }));
@@ -812,6 +838,32 @@ export default function AppPage() {
     setTimeout(() => setCopiedSqlIdx(null), 2000);
   }
 
+  function toggleStarQuery(sql: string, question?: string, dialect?: string) {
+    setStarredQueries((prev) => {
+      const trimmed = sql.trim();
+      const exists = prev.some((item) => item.sql.trim() === trimmed);
+      let next: StarredQuery[];
+      if (exists) {
+        next = prev.filter((item) => item.sql.trim() !== trimmed);
+      } else {
+        const newStar: StarredQuery = {
+          id: `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          question: question || (sql.length > 45 ? `${sql.slice(0, 45)}...` : sql),
+          sql,
+          timestamp: Date.now(),
+          dialect,
+        };
+        next = [newStar, ...prev];
+      }
+      try {
+        localStorage.setItem('askmydb_starred_queries', JSON.stringify(next));
+      } catch (e) {
+        console.error('Failed to save starred queries', e);
+      }
+      return next;
+    });
+  }
+
   async function handleRunEditedSql(idx: number) {
     if (!sessionId || !sqlDraft.trim()) return;
     setIsExecutingSql(true);
@@ -831,6 +883,8 @@ export default function AppPage() {
           columns: res.columns,
           rows: res.rows,
           chartData: res.chart_data,
+          executionTimeMs: res.execution_time_ms,
+          dialect: res.dialect,
         };
         return next;
       });
@@ -1160,66 +1214,187 @@ export default function AppPage() {
 
 
         {/* History */}
-        {history.length > 0 && (
+        {(history.length > 0 || starredQueries.length > 0) && (
           <div className="flex-1 overflow-y-auto p-4">
             <div className="flex items-center justify-between text-xs text-gray-500 mb-3">
-              <div className="flex items-center gap-1.5">
-                <History size={12} />
-                <span>Query History</span>
-                <span className="text-[10px] bg-white/5 text-gray-400 px-1.5 py-0.5 rounded-full font-mono">
-                  {history.length}
-                </span>
-              </div>
-              <button
-                onClick={() => setHistory([])}
-                className="text-[10px] text-gray-500 hover:text-red-400 transition-colors flex items-center gap-1"
-                title="Clear query history"
-              >
-                <Trash2 size={10} /> Clear
-              </button>
-            </div>
-            <div className="space-y-2">
-              {history.map((h, i) => (
-                <div
-                  key={i}
-                  onClick={() => setInput(h.question)}
-                  className="glass rounded-lg p-2.5 cursor-pointer hover:bg-white/5 transition-all group relative border border-white/5 hover:border-blue-500/30"
-                  title="Click to load into input"
+              <div className="flex items-center bg-white/5 p-0.5 rounded-lg border border-white/5 text-[11px]">
+                <button
+                  onClick={() => setHistoryTab('recent')}
+                  className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1.5 font-medium ${
+                    historyTab === 'recent'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-gray-400 hover:text-gray-200'
+                  }`}
                 >
-                  <div className="flex items-start justify-between gap-1">
-                    <p className="text-xs text-gray-300 font-medium line-clamp-2 group-hover:text-blue-300 transition-colors">
-                      {h.question}
-                    </p>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-                      <button
-                        onClick={(e) => copyHistorySql(h.sql, i, e)}
-                        className="p-1 rounded hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
-                        title="Copy SQL query"
-                      >
-                        {copiedHistoryIdx === i ? (
-                          <Check size={11} className="text-green-400" />
-                        ) : (
-                          <Copy size={11} />
-                        )}
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          executeQuestion(h.question);
-                        }}
-                        className="p-1 rounded hover:bg-blue-600/30 text-blue-400 hover:text-blue-200 transition-colors"
-                        title="Re-run query"
-                      >
-                        <ArrowUpRight size={11} />
-                      </button>
-                    </div>
-                  </div>
-                  <p className="text-[10px] text-gray-500 mt-1 truncate font-mono bg-black/20 px-1.5 py-0.5 rounded">
-                    {h.sql}
-                  </p>
-                </div>
-              ))}
+                  <History size={11} />
+                  <span>Recent</span>
+                  {history.length > 0 && (
+                    <span className="text-[9px] bg-white/20 px-1 rounded-full font-mono">
+                      {history.length}
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={() => setHistoryTab('starred')}
+                  className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1.5 font-medium ${
+                    historyTab === 'starred'
+                      ? 'bg-amber-600/90 text-white shadow-sm'
+                      : 'text-gray-400 hover:text-gray-200'
+                  }`}
+                >
+                  <Bookmark size={11} className={starredQueries.length > 0 ? 'fill-current' : ''} />
+                  <span>Starred</span>
+                  {starredQueries.length > 0 && (
+                    <span className="text-[9px] bg-white/20 px-1 rounded-full font-mono">
+                      {starredQueries.length}
+                    </span>
+                  )}
+                </button>
+              </div>
+
+              {historyTab === 'recent' && history.length > 0 && (
+                <button
+                  onClick={() => setHistory([])}
+                  className="text-[10px] text-gray-500 hover:text-red-400 transition-colors flex items-center gap-1"
+                  title="Clear query history"
+                >
+                  <Trash2 size={10} /> Clear
+                </button>
+              )}
             </div>
+
+            {historyTab === 'recent' ? (
+              <div className="space-y-2">
+                {history.length === 0 ? (
+                  <div className="text-center py-6 text-gray-500 text-xs">
+                    No recent queries yet.
+                  </div>
+                ) : (
+                  history.map((h, i) => (
+                    <div
+                      key={i}
+                      onClick={() => setInput(h.question)}
+                      className="glass rounded-lg p-2.5 cursor-pointer hover:bg-white/5 transition-all group relative border border-white/5 hover:border-blue-500/30"
+                      title="Click to load into input"
+                    >
+                      <div className="flex items-start justify-between gap-1">
+                        <p className="text-xs text-gray-300 font-medium line-clamp-2 group-hover:text-blue-300 transition-colors">
+                          {h.question}
+                        </p>
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleStarQuery(h.sql, h.question);
+                            }}
+                            className={`p-1 rounded hover:bg-white/10 transition-colors ${
+                              starredQueries.some((q) => q.sql.trim() === h.sql.trim())
+                                ? 'text-amber-400'
+                                : 'text-gray-400 hover:text-amber-300'
+                            }`}
+                            title="Star / Bookmark query"
+                          >
+                            <Bookmark
+                              size={11}
+                              className={starredQueries.some((q) => q.sql.trim() === h.sql.trim()) ? 'fill-amber-400' : ''}
+                            />
+                          </button>
+                          <button
+                            onClick={(e) => copyHistorySql(h.sql, i, e)}
+                            className="p-1 rounded hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+                            title="Copy SQL query"
+                          >
+                            {copiedHistoryIdx === i ? (
+                              <Check size={11} className="text-green-400" />
+                            ) : (
+                              <Copy size={11} />
+                            )}
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              executeQuestion(h.question);
+                            }}
+                            className="p-1 rounded hover:bg-blue-600/30 text-blue-400 hover:text-blue-200 transition-colors"
+                            title="Re-run query"
+                          >
+                            <ArrowUpRight size={11} />
+                          </button>
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-gray-500 mt-1 truncate font-mono bg-black/20 px-1.5 py-0.5 rounded">
+                        {h.sql}
+                      </p>
+                    </div>
+                  ))
+                )}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {starredQueries.length === 0 ? (
+                  <div className="text-center py-6 px-2 text-gray-500 text-xs">
+                    <Bookmark size={20} className="mx-auto mb-2 text-gray-600" />
+                    <p className="font-medium text-gray-400">No starred queries</p>
+                    <p className="text-[10px] mt-1 text-gray-600">
+                      Click the bookmark icon on any query to pin it here for quick re-use.
+                    </p>
+                  </div>
+                ) : (
+                  starredQueries.map((item) => (
+                    <div
+                      key={item.id}
+                      onClick={() => setInput(item.question)}
+                      className="glass rounded-lg p-2.5 cursor-pointer hover:bg-white/5 transition-all group relative border border-amber-500/20 hover:border-amber-500/40"
+                      title="Click to load into input"
+                    >
+                      <div className="flex items-start justify-between gap-1">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <Bookmark size={11} className="text-amber-400 fill-amber-400 flex-shrink-0" />
+                          <p className="text-xs text-gray-200 font-medium line-clamp-1 group-hover:text-amber-300 transition-colors">
+                            {item.question}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleStarQuery(item.sql);
+                            }}
+                            className="p-1 rounded hover:bg-white/10 text-amber-400 hover:text-red-400 transition-colors"
+                            title="Unstar query"
+                          >
+                            <Trash2 size={11} />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigator.clipboard.writeText(item.sql);
+                            }}
+                            className="p-1 rounded hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+                            title="Copy SQL query"
+                          >
+                            <Copy size={11} />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              executeQuestion(item.question);
+                            }}
+                            className="p-1 rounded hover:bg-blue-600/30 text-blue-400 hover:text-blue-200 transition-colors"
+                            title="Execute query"
+                          >
+                            <ArrowUpRight size={11} />
+                          </button>
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-gray-400 mt-1 truncate font-mono bg-black/30 px-1.5 py-0.5 rounded border border-white/5">
+                        {item.sql}
+                      </p>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -1346,7 +1521,7 @@ export default function AppPage() {
                 {/* SQL Toggle & Action Bar */}
                 {msg.sql && (
                   <div className="mt-2">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center justify-between gap-3">
                       <button
                         onClick={() => toggleSql(idx)}
                         className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-blue-400 transition-colors"
@@ -1354,15 +1529,54 @@ export default function AppPage() {
                         {showSql[idx] ? <EyeOff size={12} /> : <Eye size={12} />}
                         {showSql[idx] ? 'Hide SQL' : 'View Generated SQL'}
                       </button>
+                      {msg.executionTimeMs !== undefined && (
+                        <div className="flex items-center gap-1.5 text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full font-mono">
+                          <Zap size={10} className="fill-amber-400" />
+                          <span>{msg.executionTimeMs}ms</span>
+                          {msg.rows && (
+                            <>
+                              <span className="text-gray-500">•</span>
+                              <span>{msg.rows.length} rows</span>
+                            </>
+                          )}
+                          <span className="text-gray-500">•</span>
+                          <span className="text-amber-300 font-semibold uppercase">{msg.dialect || 'SQL'}</span>
+                        </div>
+                      )}
                     </div>
 
                     {showSql[idx] && (
                       <div className="mt-2 glass rounded-xl overflow-hidden border border-white/10">
                         <div className="bg-white/5 px-3 py-1.5 border-b border-white/10 flex items-center justify-between text-xs">
-                          <span className="text-[11px] text-gray-400 font-mono flex items-center gap-1">
-                            <Code size={11} className="text-blue-400" /> SQL Query
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] text-gray-400 font-mono flex items-center gap-1">
+                              <Code size={11} className="text-blue-400" /> SQL Query
+                            </span>
+                            {msg.executionTimeMs !== undefined && (
+                              <span className="hidden sm:inline-flex items-center gap-1 text-[10px] text-gray-400 bg-white/5 px-2 py-0.5 rounded font-mono">
+                                <Zap size={10} className="text-amber-400" /> {msg.executionTimeMs}ms
+                              </span>
+                            )}
+                          </div>
                           <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={() => {
+                                const question = messages[idx - 1]?.role === 'user' ? messages[idx - 1].content : undefined;
+                                toggleStarQuery(msg.sql!, question, msg.dialect);
+                              }}
+                              className={`flex items-center gap-1 text-[11px] px-2 py-0.5 rounded transition-colors ${
+                                starredQueries.some((q) => q.sql.trim() === msg.sql!.trim())
+                                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                  : 'text-gray-400 hover:text-amber-300 hover:bg-white/5'
+                              }`}
+                              title="Star / Bookmark this query"
+                            >
+                              <Bookmark
+                                size={11}
+                                className={starredQueries.some((q) => q.sql.trim() === msg.sql!.trim()) ? 'fill-amber-400 text-amber-400' : ''}
+                              />
+                              <span>{starredQueries.some((q) => q.sql.trim() === msg.sql!.trim()) ? 'Starred' : 'Star'}</span>
+                            </button>
                             <button
                               onClick={() => {
                                 if (editingSqlIdx === idx) {

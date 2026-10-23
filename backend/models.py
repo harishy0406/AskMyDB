@@ -38,6 +38,8 @@ class ChatResponse(BaseModel):
     columns: list[str]
     rows: list[list[Any]]
     chart_data: Optional[dict] = None
+    execution_time_ms: Optional[float] = None
+    dialect: Optional[str] = None
     error: Optional[str] = None
 
 

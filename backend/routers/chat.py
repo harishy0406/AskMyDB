@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 import sqlite3
 import json
+import time
 from typing import Any
 from sqlalchemy import create_engine, text
 
@@ -87,8 +88,10 @@ async def chat(request: ChatRequest):
 
     final_sql = inject_limit(cleaned_sql, settings.default_limit, dialect=dialect)
 
+    exec_start = time.time()
     try:
         columns, rows = execute_session_query(session, final_sql)
+        exec_time = round((time.time() - exec_start) * 1000, 1)
     except Exception as e:
         error_str = str(e)
         retry_message = (
@@ -108,17 +111,21 @@ async def chat(request: ChatRequest):
                     sql_query=cleaned_retry_sql,
                     columns=[],
                     rows=[],
+                    dialect=dialect,
                     error=error_msg_retry,
                 )
                 
             final_sql = inject_limit(cleaned_retry_sql, settings.default_limit, dialect=dialect)
+            retry_start = time.time()
             columns, rows = execute_session_query(session, final_sql)
+            exec_time = round((time.time() - retry_start) * 1000, 1)
         except Exception as retry_e:
             return ChatResponse(
                 reply=f"Sorry, I encountered an error executing the query and couldn't fix it: {error_str}",
                 sql_query=final_sql,
                 columns=[],
                 rows=[],
+                dialect=dialect,
                 error=error_str,
             )
 
@@ -138,6 +145,8 @@ async def chat(request: ChatRequest):
         columns=columns,
         rows=rows,
         chart_data=chart_data,
+        execution_time_ms=exec_time,
+        dialect=dialect,
     )
 
 
@@ -166,14 +175,17 @@ async def execute_sql(request: ExecuteSQLRequest):
 
     final_sql = inject_limit(cleaned_sql, settings.default_limit, dialect=dialect)
 
+    exec_start = time.time()
     try:
         columns, rows = execute_session_query(session, final_sql)
+        exec_time = round((time.time() - exec_start) * 1000, 1)
     except Exception as e:
         return ChatResponse(
             reply=f"Database execution error: {str(e)}",
             sql_query=final_sql,
             columns=[],
             rows=[],
+            dialect=dialect,
             error=str(e),
         )
 
@@ -190,6 +202,8 @@ async def execute_sql(request: ExecuteSQLRequest):
         columns=columns,
         rows=rows,
         chart_data=chart_data,
+        execution_time_ms=exec_time,
+        dialect=dialect,
     )
 
 
