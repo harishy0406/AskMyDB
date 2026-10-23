@@ -10,7 +10,7 @@ import {
   Layers, Search, Copy, Check, Sparkles, ArrowUpRight,
   Code, HelpCircle, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft,
   TrendingUp, Activity, PieChart as PieChartIcon,
-  Play, Terminal, RotateCcw, ArrowRight,
+  Play, Terminal, RotateCcw, ArrowRight, Camera, Palette,
 } from 'lucide-react';
 import {
   BarChart, Bar, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell,
@@ -35,12 +35,33 @@ type SourceInfo = {
   rowCount: number;
 };
 
-const CHART_PALETTE = ['#3b82f6', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b', '#06b6d4', '#6366f1'];
+const COLOR_THEMES: Record<string, { name: string; colors: string[] }> = {
+  indigo: {
+    name: 'Electric',
+    colors: ['#3b82f6', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b', '#06b6d4', '#6366f1'],
+  },
+  cyber: {
+    name: 'Cyberpunk',
+    colors: ['#06b6d4', '#10b981', '#f43f5e', '#a855f7', '#eab308', '#3b82f6', '#14b8a6'],
+  },
+  emerald: {
+    name: 'Emerald',
+    colors: ['#10b981', '#059669', '#34d399', '#6ee7b7', '#14b8a6', '#0d9488', '#047857'],
+  },
+  sunset: {
+    name: 'Sunset',
+    colors: ['#f97316', '#ef4444', '#ec4899', '#f59e0b', '#e11d48', '#8b5cf6', '#d97706'],
+  },
+};
 
 function InteractiveChart({ chartData }: { chartData: any }) {
   const initialType = chartData.suggested_type || chartData.type || 'bar';
   const [chartType, setChartType] = useState<'bar' | 'line' | 'area' | 'pie'>(initialType);
+  const [selectedTheme, setSelectedTheme] = useState<string>('indigo');
+  const [isExporting, setIsExporting] = useState<boolean>(false);
+  const chartContainerRef = useRef<HTMLDivElement>(null);
 
+  const palette = COLOR_THEMES[selectedTheme]?.colors || COLOR_THEMES.indigo.colors;
   const canPie = Boolean(chartData.can_pie || (chartData.lines?.length === 1 && chartData.data?.length <= 10));
 
   const availableTypes: { id: 'bar' | 'line' | 'area' | 'pie'; label: string; icon: any }[] = [
@@ -54,6 +75,65 @@ function InteractiveChart({ chartData }: { chartData: any }) {
 
   const currentType = availableTypes.some((t) => t.id === chartType) ? chartType : 'bar';
 
+  const handleExportPng = () => {
+    if (!chartContainerRef.current) return;
+    setIsExporting(true);
+
+    try {
+      const svgElement = chartContainerRef.current.querySelector('svg');
+      if (!svgElement) {
+        setIsExporting(false);
+        return;
+      }
+
+      const svgClone = svgElement.cloneNode(true) as SVGSVGElement;
+      svgClone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+
+      const svgString = new XMLSerializer().serializeToString(svgClone);
+      const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+      const URL = window.URL || window.webkitURL || window;
+      const blobURL = URL.createObjectURL(svgBlob);
+
+      const image = new Image();
+      image.onload = () => {
+        const width = (svgElement.clientWidth || 640) * 2;
+        const height = (svgElement.clientHeight || 280) * 2;
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+
+        if (ctx) {
+          ctx.fillStyle = '#0f172a';
+          ctx.fillRect(0, 0, width, height);
+          ctx.drawImage(image, 0, 0, width, height);
+
+          const pngUrl = canvas.toDataURL('image/png');
+          const link = document.createElement('a');
+          link.href = pngUrl;
+          link.download = `chart_${currentType}_${Date.now()}.png`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        }
+
+        URL.revokeObjectURL(blobURL);
+        setIsExporting(false);
+      };
+
+      image.onerror = () => {
+        URL.revokeObjectURL(blobURL);
+        setIsExporting(false);
+      };
+
+      image.src = blobURL;
+    } catch (e) {
+      console.error('Failed to export chart image', e);
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div className="mt-3 glass rounded-xl p-4 border border-white/10">
       <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
@@ -65,31 +145,61 @@ function InteractiveChart({ chartData }: { chartData: any }) {
           </span>
         </div>
 
-        {/* Chart Type Selector */}
-        <div className="flex items-center bg-black/40 p-0.5 rounded-lg border border-white/10 gap-0.5">
-          {availableTypes.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = currentType === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setChartType(tab.id)}
-                className={`flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md font-medium transition-all ${
-                  isActive
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
-                }`}
-                title={`Switch to ${tab.label} chart`}
-              >
-                <Icon size={12} />
-                <span>{tab.label}</span>
-              </button>
-            );
-          })}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Palette selector */}
+          <div className="flex items-center gap-1 bg-black/40 px-2 py-1 rounded-lg border border-white/10">
+            <Palette size={11} className="text-gray-400" />
+            <select
+              value={selectedTheme}
+              onChange={(e) => setSelectedTheme(e.target.value)}
+              className="bg-transparent text-[11px] text-gray-300 focus:outline-none cursor-pointer"
+              title="Change chart color palette"
+            >
+              {Object.entries(COLOR_THEMES).map(([k, v]) => (
+                <option key={k} value={k} className="bg-slate-900 text-gray-200">
+                  {v.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Export PNG */}
+          <button
+            onClick={handleExportPng}
+            disabled={isExporting}
+            className="flex items-center gap-1 text-[11px] text-gray-300 hover:text-white bg-black/40 hover:bg-white/10 border border-white/10 px-2 py-1 rounded-lg transition-colors disabled:opacity-50"
+            title="Download chart as PNG image"
+          >
+            {isExporting ? <Loader2 size={11} className="animate-spin text-blue-400" /> : <Camera size={11} className="text-blue-400" />}
+            <span>Export PNG</span>
+          </button>
+
+          {/* Chart Type Selector */}
+          <div className="flex items-center bg-black/40 p-0.5 rounded-lg border border-white/10 gap-0.5">
+            {availableTypes.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = currentType === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setChartType(tab.id)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md font-medium transition-all ${
+                    isActive
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
+                  }`}
+                  title={`Switch to ${tab.label} chart`}
+                >
+                  <Icon size={12} />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
-      <div className="h-64 w-full">
+      <div ref={chartContainerRef} className="h-64 w-full">
         <ResponsiveContainer width="100%" height="100%">
           {currentType === 'bar' ? (
             <BarChart data={chartData.data}>
@@ -110,7 +220,7 @@ function InteractiveChart({ chartData }: { chartData: any }) {
                 <Bar
                   key={li}
                   dataKey={line}
-                  fill={CHART_PALETTE[li % CHART_PALETTE.length]}
+                  fill={palette[li % palette.length]}
                   radius={[4, 4, 0, 0]}
                 />
               ))}
@@ -135,9 +245,9 @@ function InteractiveChart({ chartData }: { chartData: any }) {
                   key={li}
                   type="monotone"
                   dataKey={line}
-                  stroke={CHART_PALETTE[li % CHART_PALETTE.length]}
+                  stroke={palette[li % palette.length]}
                   strokeWidth={2.5}
-                  dot={{ r: 3, fill: CHART_PALETTE[li % CHART_PALETTE.length] }}
+                  dot={{ r: 3, fill: palette[li % palette.length] }}
                   activeDot={{ r: 6 }}
                 />
               ))}
@@ -147,8 +257,8 @@ function InteractiveChart({ chartData }: { chartData: any }) {
               <defs>
                 {chartData.lines?.map((line: string, li: number) => (
                   <linearGradient key={li} id={`areaGrad-${li}`} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={CHART_PALETTE[li % CHART_PALETTE.length]} stopOpacity={0.6} />
-                    <stop offset="95%" stopColor={CHART_PALETTE[li % CHART_PALETTE.length]} stopOpacity={0.05} />
+                    <stop offset="5%" stopColor={palette[li % palette.length]} stopOpacity={0.6} />
+                    <stop offset="95%" stopColor={palette[li % palette.length]} stopOpacity={0.05} />
                   </linearGradient>
                 ))}
               </defs>
@@ -170,7 +280,7 @@ function InteractiveChart({ chartData }: { chartData: any }) {
                   key={li}
                   type="monotone"
                   dataKey={line}
-                  stroke={CHART_PALETTE[li % CHART_PALETTE.length]}
+                  stroke={palette[li % palette.length]}
                   fillOpacity={1}
                   fill={`url(#areaGrad-${li})`}
                 />
@@ -199,7 +309,7 @@ function InteractiveChart({ chartData }: { chartData: any }) {
                 paddingAngle={3}
               >
                 {chartData.data?.map((_: any, index: number) => (
-                  <Cell key={`cell-${index}`} fill={CHART_PALETTE[index % CHART_PALETTE.length]} />
+                  <Cell key={`cell-${index}`} fill={palette[index % palette.length]} />
                 ))}
               </Pie>
             </PieChart>
