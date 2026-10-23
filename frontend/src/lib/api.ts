@@ -91,3 +91,13 @@ export async function executeSql(sessionId: string, sqlQuery: string): Promise<a
   return res.json();
 }
 
+export async function getTableProfile(sessionId: string, tableName: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/api/table-profile/${sessionId}/${encodeURIComponent(tableName)}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to load table profile" }));
+    throw new Error(err.detail || "Failed to load table profile");
+  }
+  return res.json();
+}
+
+

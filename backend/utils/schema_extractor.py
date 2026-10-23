@@ -77,3 +77,116 @@ def build_schema_prompt(schema: dict, dialect: str = "SQLite") -> str:
             parts.append(f"Sample rows:\n{sample_str}")
 
     return "\n\n".join(parts)
+
+
+def generate_table_profile(session: dict, table_name: str) -> dict:
+    source_type = session.get("source_type")
+
+    def run_query(sql_str: str):
+        if source_type == "database" and session.get("connection_string"):
+            engine = create_engine(session["connection_string"], pool_pre_ping=True)
+            try:
+                with engine.connect() as conn:
+                    res = conn.execute(text(sql_str))
+                    if res.returns_rows:
+                        cols = list(res.keys())
+                        rows = [list(r) for r in res.fetchall()]
+                        return cols, rows
+                    return [], []
+            finally:
+                engine.dispose()
+        else:
+            conn = sqlite3.connect(session["db_path"])
+            cur = conn.cursor()
+            cur.execute(sql_str)
+            cols = [d[0] for d in cur.description] if cur.description else []
+            rows = [list(r) for r in cur.fetchall()]
+            conn.close()
+            return cols, rows
+
+    escaped_table = f"'{table_name}'" if source_type != "database" else table_name
+
+    row_count = 0
+    try:
+        _, rows = run_query(f"SELECT COUNT(*) FROM {escaped_table}")
+        if rows and rows[0]:
+            row_count = int(rows[0][0])
+    except Exception:
+        row_count = 0
+
+    table_schema = session.get("schema", {}).get(table_name, {})
+    schema_cols = table_schema.get("columns", [])
+
+    column_stats = []
+    for col in schema_cols:
+        col_name = col["name"]
+        col_type = col.get("type", "TEXT").upper()
+        escaped_col = f"'{col_name}'" if source_type != "database" else col_name
+
+        stat = {
+            "name": col_name,
+            "type": col_type,
+            "nullable": col.get("nullable", True),
+            "null_count": 0,
+            "distinct_count": 0,
+            "sample_values": [],
+            "min": None,
+            "max": None,
+            "avg": None,
+        }
+
+        try:
+            _, null_res = run_query(f"SELECT COUNT(*) FROM {escaped_table} WHERE {escaped_col} IS NULL")
+            if null_res and null_res[0]:
+                stat["null_count"] = int(null_res[0][0])
+        except Exception:
+            pass
+
+        try:
+            _, dist_res = run_query(f"SELECT COUNT(DISTINCT {escaped_col}) FROM {escaped_table}")
+            if dist_res and dist_res[0]:
+                stat["distinct_count"] = int(dist_res[0][0])
+        except Exception:
+            pass
+
+        try:
+            _, samp_res = run_query(f"SELECT DISTINCT {escaped_col} FROM {escaped_table} WHERE {escaped_col} IS NOT NULL LIMIT 4")
+            if samp_res:
+                stat["sample_values"] = [str(r[0]) for r in samp_res if r[0] is not None]
+        except Exception:
+            pass
+
+        is_numeric = any(t in col_type for t in ["INT", "FLOAT", "DOUBLE", "NUMERIC", "DECIMAL", "REAL"])
+        if is_numeric:
+            try:
+                _, num_res = run_query(f"SELECT MIN({escaped_col}), MAX({escaped_col}), AVG({escaped_col}) FROM {escaped_table} WHERE {escaped_col} IS NOT NULL")
+                if num_res and num_res[0]:
+                    min_val, max_val, avg_val = num_res[0]
+                    stat["min"] = round(float(min_val), 2) if min_val is not None else None
+                    stat["max"] = round(float(max_val), 2) if max_val is not None else None
+                    stat["avg"] = round(float(avg_val), 2) if avg_val is not None else None
+            except Exception:
+                pass
+
+        column_stats.append(stat)
+
+    suggested_prompts = []
+    numeric_cols = [c["name"] for c in column_stats if c.get("avg") is not None]
+    text_cols = [c["name"] for c in column_stats if c.get("avg") is None and c["distinct_count"] > 1]
+
+    if numeric_cols and text_cols:
+        suggested_prompts.append(f"Show the top 5 {text_cols[0]} by total {numeric_cols[0]}")
+        suggested_prompts.append(f"What is the average {numeric_cols[0]} grouped by {text_cols[0]}?")
+    elif numeric_cols:
+        suggested_prompts.append(f"What is the average, min, and max of {numeric_cols[0]}?")
+
+    suggested_prompts.append(f"Show 10 recent records from {table_name}")
+
+    return {
+        "table_name": table_name,
+        "row_count": row_count,
+        "column_count": len(column_stats),
+        "columns": column_stats,
+        "suggested_prompts": suggested_prompts,
+    }
+

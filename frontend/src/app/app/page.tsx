@@ -10,13 +10,13 @@ import {
   Layers, Search, Copy, Check, Sparkles, ArrowUpRight,
   Code, HelpCircle, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft,
   TrendingUp, Activity, PieChart as PieChartIcon,
-  Play, Terminal, RotateCcw,
+  Play, Terminal, RotateCcw, ArrowRight,
 } from 'lucide-react';
 import {
   BarChart, Bar, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
-import { uploadFile, sendChat, createSession, getSession, deleteSession, connectDatabase, getSchema, executeSql } from '@/lib/api';
+import { uploadFile, sendChat, createSession, getSession, deleteSession, connectDatabase, getSchema, executeSql, getTableProfile } from '@/lib/api';
 
 type Message = {
   role: 'user' | 'assistant';
@@ -573,6 +573,10 @@ export default function AppPage() {
   const [sqlDraft, setSqlDraft] = useState<string>('');
   const [isExecutingSql, setIsExecutingSql] = useState<boolean>(false);
   const [sqlExecError, setSqlExecError] = useState<string | null>(null);
+  const [profileTable, setProfileTable] = useState<string | null>(null);
+  const [tableProfileData, setTableProfileData] = useState<any | null>(null);
+  const [isProfileLoading, setIsProfileLoading] = useState<boolean>(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -729,6 +733,27 @@ export default function AppPage() {
     } finally {
       setIsExecutingSql(false);
     }
+  }
+
+  async function openTableProfile(tableName: string) {
+    if (!sessionId) return;
+    setProfileTable(tableName);
+    setIsProfileLoading(true);
+    setProfileError(null);
+    try {
+      const data = await getTableProfile(sessionId, tableName);
+      setTableProfileData(data);
+    } catch (err: any) {
+      setProfileError(err.message || 'Failed to generate profile');
+    } finally {
+      setIsProfileLoading(false);
+    }
+  }
+
+  function closeTableProfile() {
+    setProfileTable(null);
+    setTableProfileData(null);
+    setProfileError(null);
   }
 
 
@@ -982,9 +1007,21 @@ export default function AppPage() {
                             {tableName}
                           </span>
                         </div>
-                        <span className="text-[10px] text-gray-500 flex-shrink-0 ml-1">
-                          {tableInfo.columns.length} cols
-                        </span>
+                        <div className="flex items-center gap-1.5 flex-shrink-0 ml-1">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openTableProfile(tableName);
+                            }}
+                            className="p-1 rounded hover:bg-white/10 text-gray-400 hover:text-blue-300 transition-colors"
+                            title="View Table Insights & Profile"
+                          >
+                            <Sparkles size={11} className="text-blue-400" />
+                          </button>
+                          <span className="text-[10px] text-gray-500 flex-shrink-0 font-mono">
+                            {tableInfo.columns.length} cols
+                          </span>
+                        </div>
                       </div>
 
                       {isExpanded && (
@@ -1407,6 +1444,163 @@ export default function AppPage() {
           </div>
         </div>
       </div>
+
+      {/* Table Profile & Insights Modal */}
+      {profileTable && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-200">
+          <div className="bg-[#0b1120] border border-white/20 rounded-2xl flex flex-col w-full max-w-4xl max-h-[85vh] shadow-2xl overflow-hidden glass">
+            {/* Modal Header */}
+            <div className="px-5 py-3.5 border-b border-white/10 flex items-center justify-between bg-white/[0.03]">
+              <div className="flex items-center gap-2.5">
+                <Sparkles size={16} className="text-blue-400" />
+                <div>
+                  <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                    <span>{profileTable}</span>
+                    <span className="text-[10px] bg-blue-500/20 text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded-full font-mono">
+                      Table Insights
+                    </span>
+                  </h3>
+                  <p className="text-xs text-gray-400">
+                    Statistical summary and column profile
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={closeTableProfile}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+                title="Close Profile (Esc)"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              {isProfileLoading ? (
+                <div className="py-16 flex flex-col items-center justify-center gap-3">
+                  <Loader2 size={24} className="animate-spin text-blue-400" />
+                  <p className="text-xs text-gray-400 font-mono">Analyzing table profile & distributions...</p>
+                </div>
+              ) : profileError ? (
+                <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-300 text-xs flex items-center gap-2">
+                  <AlertCircle size={14} className="text-rose-400 flex-shrink-0" />
+                  <span>{profileError}</span>
+                </div>
+              ) : tableProfileData ? (
+                <>
+                  {/* Quick Metrics Cards */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="bg-white/[0.03] border border-white/10 rounded-xl p-3">
+                      <span className="text-[11px] text-gray-400">Total Rows</span>
+                      <p className="text-lg font-bold text-white font-mono mt-0.5">
+                        {tableProfileData.row_count?.toLocaleString() || 0}
+                      </p>
+                    </div>
+                    <div className="bg-white/[0.03] border border-white/10 rounded-xl p-3">
+                      <span className="text-[11px] text-gray-400">Columns</span>
+                      <p className="text-lg font-bold text-blue-400 font-mono mt-0.5">
+                        {tableProfileData.column_count || 0}
+                      </p>
+                    </div>
+                    <div className="bg-white/[0.03] border border-white/10 rounded-xl p-3">
+                      <span className="text-[11px] text-gray-400">Numeric Metrics</span>
+                      <p className="text-lg font-bold text-emerald-400 font-mono mt-0.5">
+                        {tableProfileData.columns?.filter((c: any) => c.avg !== null).length || 0}
+                      </p>
+                    </div>
+                    <div className="bg-white/[0.03] border border-white/10 rounded-xl p-3">
+                      <span className="text-[11px] text-gray-400">Categorical Fields</span>
+                      <p className="text-lg font-bold text-purple-400 font-mono mt-0.5">
+                        {tableProfileData.columns?.filter((c: any) => c.avg === null).length || 0}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Column Profile Table */}
+                  <div className="border border-white/10 rounded-xl overflow-hidden">
+                    <div className="bg-white/5 px-3 py-2 border-b border-white/10 text-xs text-gray-300 font-medium">
+                      Column Distributions & Values
+                    </div>
+                    <div className="overflow-x-auto max-h-72">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b border-white/10 bg-white/[0.02] text-gray-400">
+                            <th className="px-3 py-2 text-left">Column</th>
+                            <th className="px-3 py-2 text-left">Type</th>
+                            <th className="px-3 py-2 text-left">Nulls</th>
+                            <th className="px-3 py-2 text-left">Distinct</th>
+                            <th className="px-3 py-2 text-left">Stats (Min / Max / Avg)</th>
+                            <th className="px-3 py-2 text-left">Sample Values</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {tableProfileData.columns?.map((col: any, ci: number) => (
+                            <tr key={ci} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                              <td className="px-3 py-2 text-gray-200 font-mono font-medium">{col.name}</td>
+                              <td className="px-3 py-2 text-gray-400 font-mono text-[11px]">{col.type}</td>
+                              <td className="px-3 py-2 text-gray-400 font-mono">
+                                {col.null_count > 0 ? (
+                                  <span className="text-amber-400">{col.null_count} nulls</span>
+                                ) : (
+                                  <span className="text-gray-500">0</span>
+                                )}
+                              </td>
+                              <td className="px-3 py-2 text-gray-300 font-mono">{col.distinct_count}</td>
+                              <td className="px-3 py-2 text-gray-300 font-mono text-[11px]">
+                                {col.avg !== null ? (
+                                  <span className="text-blue-300">
+                                    {col.min} / {col.max} <span className="text-gray-500">(μ {col.avg})</span>
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-600">—</span>
+                                )}
+                              </td>
+                              <td className="px-3 py-2">
+                                <div className="flex flex-wrap gap-1 max-w-xs">
+                                  {col.sample_values?.slice(0, 3).map((val: string, vi: number) => (
+                                    <span key={vi} className="text-[10px] bg-white/5 text-gray-300 px-1.5 py-0.5 rounded font-mono truncate max-w-[90px]">
+                                      {val}
+                                    </span>
+                                  ))}
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Quick Ask Insights */}
+                  {tableProfileData.suggested_prompts && tableProfileData.suggested_prompts.length > 0 && (
+                    <div className="bg-white/[0.02] border border-white/10 rounded-xl p-3.5 space-y-2">
+                      <span className="text-xs text-gray-300 font-medium flex items-center gap-1.5">
+                        <Sparkles size={12} className="text-blue-400" /> Quick Ask Suggestions
+                      </span>
+                      <div className="flex flex-wrap gap-2">
+                        {tableProfileData.suggested_prompts.map((prompt: string, pi: number) => (
+                          <button
+                            key={pi}
+                            onClick={() => {
+                              closeTableProfile();
+                              executeQuestion(prompt);
+                            }}
+                            className="text-xs text-blue-300 hover:text-white bg-blue-600/10 hover:bg-blue-600/30 border border-blue-500/20 px-2.5 py-1 rounded-lg transition-all text-left flex items-center gap-1"
+                          >
+                            <span>{prompt}</span>
+                            <ArrowRight size={11} className="flex-shrink-0 opacity-70" />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
